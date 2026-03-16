@@ -11,9 +11,7 @@ local player = Players.LocalPlayer
 local mouse = player:GetMouse()
 
 -- Загружаем макро контроллер
-local Macro = loadfile("macro.lua")()  -- если файлы в одной папке
--- или через GitHub:
--- local Macro = loadstring(game:HttpGet("https://raw.githubusercontent.com/zeexHubLua/zeexHub/main/macro.lua"))()
+local Macro = loadstring(game:HttpGet("https://raw.githubusercontent.com/zeexHubLua/zeexHub/main/macro.lua"))()
 
 -- ЦВЕТА
 local colors = {
