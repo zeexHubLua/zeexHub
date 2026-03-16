@@ -1,5 +1,6 @@
 --[[
-    ZEEXHUB - КОМПАКТНАЯ ВЕРСИЯ 450x300
+    UI.LUA - ТОЛЬКО ИНТЕРФЕЙС
+    Вызывает функции из macro.lua
 ]]
 
 local Players = game:GetService("Players")
@@ -8,6 +9,11 @@ local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 local mouse = player:GetMouse()
+
+-- Загружаем макро контроллер
+local Macro = loadfile("macro.lua")()  -- если файлы в одной папке
+-- или через GitHub:
+-- local Macro = loadstring(game:HttpGet("https://raw.githubusercontent.com/zeexHubLua/zeexHub/main/macro.lua"))()
 
 -- ЦВЕТА
 local colors = {
@@ -26,7 +32,7 @@ screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
 screenGui.DisplayOrder = 999
 
--- ОСНОВНОЕ ОКНО (450x300)
+-- ОСНОВНОЕ ОКНО
 local mainFrame = Instance.new("Frame")
 mainFrame.Parent = screenGui
 mainFrame.BackgroundColor3 = colors.mainBg
@@ -59,7 +65,6 @@ local titleCorner = Instance.new("UICorner")
 titleCorner.CornerRadius = UDim.new(0, 15)
 titleCorner.Parent = titleBar
 
--- НАЗВАНИЕ
 local titleText = Instance.new("TextLabel")
 titleText.Parent = titleBar
 titleText.Size = UDim2.new(1, -80, 1, 0)
@@ -101,7 +106,7 @@ local closeCorner = Instance.new("UICorner")
 closeCorner.CornerRadius = UDim.new(0, 6)
 closeCorner.Parent = closeBtn
 
--- КНОПКА ВОЗВРАТА (тоже уменьшил)
+-- КНОПКА ВОЗВРАТА
 local tabButton = Instance.new("TextButton")
 tabButton.Parent = screenGui
 tabButton.Size = UDim2.new(0, 40, 0, 40)
@@ -133,7 +138,7 @@ closeBtn.MouseButton1Click:Connect(function()
     screenGui:Destroy()
 end)
 
--- ЛЕВАЯ ПАНЕЛЬ (уже)
+-- ЛЕВАЯ ПАНЕЛЬ
 local leftPanel = Instance.new("Frame")
 leftPanel.Parent = mainFrame
 leftPanel.Size = UDim2.new(0, 90, 1, -45)
@@ -151,7 +156,7 @@ leftStroke.Parent = leftPanel
 leftStroke.Color = colors.accent
 leftStroke.Thickness = 2
 
--- Кнопки навигации (поменьше)
+-- Кнопки навигации
 local function createNavButton(text, yPos)
     local btn = Instance.new("TextButton")
     btn.Parent = leftPanel
@@ -241,7 +246,7 @@ mainPlaceholder.TextTransparency = 0.3
 mainPlaceholder.Font = Enum.Font.Gotham
 mainPlaceholder.TextSize = 14
 
--- MACRO ВКЛАДКА (кнопки тоже уменьшил)
+-- MACRO ВКЛАДКА
 local macroTitle = Instance.new("TextLabel")
 macroTitle.Parent = macroContainer
 macroTitle.Size = UDim2.new(1, 0, 0, 25)
@@ -251,7 +256,8 @@ macroTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 macroTitle.Font = Enum.Font.GothamBold
 macroTitle.TextSize = 16
 
-local function createMacroButton(text, x, y, parent)
+-- Функция создания кнопок (ТОЛЬКО ВНЕШНИЙ ВИД)
+local function createMacroButton(text, x, y, parent, actionType)
     local btn = Instance.new("TextButton")
     btn.Parent = parent
     btn.Size = UDim2.new(0, 100, 0, 30)
@@ -268,18 +274,46 @@ local function createMacroButton(text, x, y, parent)
     btnCorner.CornerRadius = UDim.new(0, 6)
     btnCorner.Parent = btn
     
+    -- Анимация
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.2), {
+            BackgroundColor3 = Color3.fromRGB(120, 0, 180),
+            Size = UDim2.new(0, 105, 0, 32)
+        }):Play()
+    end)
+    
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.2), {
+            BackgroundColor3 = colors.button,
+            Size = UDim2.new(0, 100, 0, 30)
+        }):Play()
+    end)
+    
+    -- Вызов функций из MacroAPI
+    if actionType == "create" then
+        btn.MouseButton1Click:Connect(function() Macro.create() end)
+    elseif actionType == "list" then
+        btn.MouseButton1Click:Connect(function() Macro.list() end)
+    elseif actionType == "refresh" then
+        btn.MouseButton1Click:Connect(function() Macro.refresh() end)
+    elseif actionType == "load" then
+        btn.MouseButton1Click:Connect(function() Macro.load() end)
+    elseif actionType == "record" then
+        btn.MouseButton1Click:Connect(function() Macro.record(btn) end)
+    elseif actionType == "start" then
+        btn.MouseButton1Click:Connect(function() Macro.start() end)
+    end
+    
     return btn
 end
 
--- Ряд 1 (сместил под размеры)
-createMacroButton("📁 CREATE", 15, 30, macroContainer)
-createMacroButton("📋 LIST", 125, 30, macroContainer)
-createMacroButton("🔄 REFRESH", 235, 30, macroContainer)
-
--- Ряд 2
-createMacroButton("📂 LOAD", 15, 70, macroContainer)
-createMacroButton("⏺️ RECORD", 125, 70, macroContainer)
-createMacroButton("▶️ START", 235, 70, macroContainer)
+-- Создаем кнопки
+createMacroButton("📁 CREATE", 15, 30, macroContainer, "create")
+createMacroButton("📋 LIST", 125, 30, macroContainer, "list")
+createMacroButton("🔄 REFRESH", 235, 30, macroContainer, "refresh")
+createMacroButton("📂 LOAD", 15, 70, macroContainer, "load")
+createMacroButton("⏺️ RECORD", 125, 70, macroContainer, "record")
+createMacroButton("▶️ START", 235, 70, macroContainer, "start")
 
 -- SETTINGS ВКЛАДКА
 local settingsTitle = Instance.new("TextLabel")
@@ -321,16 +355,4 @@ settingsBtn.MouseButton1Click:Connect(function()
     settingsContainer.Visible = true
 end)
 
--- ФУТЕР
-local footer = Instance.new("TextLabel")
-footer.Parent = mainFrame
-footer.Size = UDim2.new(1, 0, 0, 18)
-footer.Position = UDim2.new(0, 0, 1, -18)
-footer.BackgroundTransparency = 1
-footer.Text = "⚡ zeexHub ⚡"
-footer.TextColor3 = Color3.fromRGB(200, 180, 255)
-footer.TextTransparency = 0.2
-footer.Font = Enum.Font.Gotham
-footer.TextSize = 10
-
-print("✅ КОМПАКТ 450x300 | Все кнопки на месте")
+--
