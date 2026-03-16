@@ -1,11 +1,10 @@
 --[[
-    ZEEXHUB - MACRO КОНТРОЛЛЕР
-    Полностью рабочий: CREATE, LIST, REFRESH, LOAD, RECORD, START
+    MACRO.LUA - ЯДРО МАКРОСОВ
+    Отвечает за: CREATE, LIST, REFRESH, LOAD, RECORD, START
 ]]
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local RunService = game:GetService("RunService")
 
@@ -13,7 +12,7 @@ local player = Players.LocalPlayer
 local mouse = player:GetMouse()
 
 -- ==========================================
--- ДАННЫЕ МАКРОСОВ
+-- ДАННЫЕ
 -- ==========================================
 local macros = {}  -- { name = "Имя", actions = {}, created = time }
 local selectedMacro = nil
@@ -23,18 +22,76 @@ local currentRecording = nil
 local recordStartTime = 0
 local lastUnits = {}
 
--- ЦВЕТА (под твою тему)
+-- ЦВЕТА (для уведомлений)
 local colors = {
     mainBg = Color3.fromRGB(15, 0, 25),
-    panelBg = Color3.fromRGB(25, 0, 40),
     button = Color3.fromRGB(80, 0, 130),
     buttonAlt = Color3.fromRGB(120, 0, 180),
-    text = Color3.fromRGB(255, 255, 255),
     accent = Color3.fromRGB(160, 0, 255)
 }
 
 -- ==========================================
--- ФУНКЦИИ ПОИСКА ЮНИТОВ
+-- RGB УВЕДОМЛЕНИЯ
+-- ==========================================
+local function showNotification(message, duration)
+    duration = duration or 2
+    
+    local notif = Instance.new("Frame")
+    notif.Parent = player.PlayerGui
+    notif.Size = UDim2.new(0, 300, 0, 45)
+    notif.Position = UDim2.new(0.5, -150, 0, -50)
+    notif.BackgroundColor3 = colors.mainBg
+    notif.BackgroundTransparency = 0.1
+    notif.ZIndex = 200
+    notif.ClipsDescendants = true
+    
+    local notifCorner = Instance.new("UICorner")
+    notifCorner.CornerRadius = UDim.new(0, 12)
+    notifCorner.Parent = notif
+    
+    local notifStroke = Instance.new("UIStroke")
+    notifStroke.Parent = notif
+    notifStroke.Thickness = 3
+    
+    local notifText = Instance.new("TextLabel")
+    notifText.Parent = notif
+    notifText.Size = UDim2.new(1, -10, 1, 0)
+    notifText.Position = UDim2.new(0, 5, 0, 0)
+    notifText.BackgroundTransparency = 1
+    notifText.Text = message
+    notifText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    notifText.Font = Enum.Font.GothamBold
+    notifText.TextSize = 14
+    notifText.ZIndex = 201
+    
+    -- RGB анимация обводки
+    spawn(function()
+        local hue = 0
+        while notif.Parent do
+            hue = (hue + 0.01) % 1
+            notifStroke.Color = Color3.fromHSV(hue, 1, 1)
+            wait(0.02)
+        end
+    end)
+    
+    TweenService:Create(notif, TweenInfo.new(0.3), {
+        Position = UDim2.new(0.5, -150, 0, 20)
+    }):Play()
+    
+    task.wait(duration)
+    
+    if notif.Parent then
+        TweenService:Create(notif, TweenInfo.new(0.3), {
+            Position = UDim2.new(0.5, -150, 0, -50),
+            BackgroundTransparency = 1
+        }):Play()
+        task.wait(0.3)
+        notif:Destroy()
+    end
+end
+
+-- ==========================================
+-- ПОИСК ЮНИТОВ
 -- ==========================================
 local function findUnits()
     local units = {}
@@ -58,8 +115,7 @@ local function findUnits()
                     units[unitId] = {
                         unit = unit,
                         position = root.Position,
-                        name = unit.Name,
-                        cframe = root.CFrame
+                        name = unit.Name
                     }
                 end
             end
@@ -69,7 +125,7 @@ local function findUnits()
 end
 
 -- ==========================================
--- ФУНКЦИИ ЗАПИСИ МАКРОСА
+-- ФУНКЦИИ МАКРОСОВ
 -- ==========================================
 local function createMacro(name)
     return {
@@ -93,31 +149,25 @@ local function startMacroRecording()
             local currentUnits = findUnits()
             local currentTime = tick() - recordStartTime
             
-            -- Поиск новых юнитов (покупка)
             for id, unit in pairs(currentUnits) do
                 if not lastUnits[id] then
                     table.insert(currentRecording.actions, {
                         time = currentTime,
                         type = "buy",
                         position = unit.position,
-                        cframe = unit.cframe,
                         unitName = unit.name
                     })
-                    showNotification("💰 Куплен: " .. unit.name, 1)
                 end
             end
             
-            -- Поиск удаленных юнитов (продажа)
             for id, unit in pairs(lastUnits) do
                 if not currentUnits[id] then
                     table.insert(currentRecording.actions, {
                         time = currentTime,
                         type = "sell",
                         position = unit.position,
-                        cframe = unit.cframe,
                         unitName = unit.name
                     })
-                    showNotification("💸 Продан: " .. unit.name, 1)
                 end
             end
             
@@ -136,16 +186,13 @@ local function stopMacroRecording()
         table.insert(macros, currentRecording)
         showNotification("✅ МАКРОС СОХРАНЕН - " .. #currentRecording.actions .. " действий", 2)
     else
-        showNotification("⚠️ Нет действий", 2)
+        showNotification("⚠️ Нет действий для сохранения", 2)
     end
     
     currentRecording = nil
     lastUnits = {}
 end
 
--- ==========================================
--- ФУНКЦИЯ ВОСПРОИЗВЕДЕНИЯ
--- ==========================================
 local function playMacro(macro)
     if not macro or #macro.actions == 0 then
         showNotification("⚠️ Макрос пуст", 2)
@@ -181,48 +228,7 @@ local function playMacro(macro)
 end
 
 -- ==========================================
--- ФУНКЦИЯ УВЕДОМЛЕНИЙ
--- ==========================================
-local function showNotification(message, duration)
-    duration = duration or 2
-    
-    local notif = Instance.new("Frame")
-    notif.Parent = player.PlayerGui
-    notif.Size = UDim2.new(0, 300, 0, 40)
-    notif.Position = UDim2.new(0.5, -150, 0, -50)
-    notif.BackgroundColor3 = colors.mainBg
-    notif.BackgroundTransparency = 0.1
-    notif.ZIndex = 200
-    
-    local notifCorner = Instance.new("UICorner")
-    notifCorner.CornerRadius = UDim.new(0, 10)
-    notifCorner.Parent = notif
-    
-    local notifStroke = Instance.new("UIStroke")
-    notifStroke.Parent = notif
-    notifStroke.Thickness = 2
-    notifStroke.Color = colors.accent
-    
-    local notifText = Instance.new("TextLabel")
-    notifText.Parent = notif
-    notifText.Size = UDim2.new(1, -10, 1, 0)
-    notifText.Position = UDim2.new(0, 5, 0, 0)
-    notifText.BackgroundTransparency = 1
-    notifText.Text = message
-    notifText.TextColor3 = Color3.fromRGB(255, 255, 255)
-    notifText.Font = Enum.Font.GothamBold
-    notifText.TextSize = 14
-    
-    TweenService:Create(notif, TweenInfo.new(0.3), {
-        Position = UDim2.new(0.5, -150, 0, 20)
-    }):Play()
-    
-    task.wait(duration)
-    notif:Destroy()
-end
-
--- ==========================================
--- UI ЭЛЕМЕНТЫ ДЛЯ MACRO (окна и кнопки)
+-- UI ЭЛЕМЕНТЫ (окна)
 -- ==========================================
 
 -- Затемнение
@@ -250,7 +256,7 @@ createWindow.Name = "CreateWindow"
 createWindow.Parent = player.PlayerGui
 createWindow.Size = UDim2.new(0, 320, 0, 160)
 createWindow.Position = UDim2.new(0.5, -160, 0.5, -80)
-createWindow.BackgroundColor3 = colors.panelBg
+createWindow.BackgroundColor3 = colors.mainBg
 createWindow.BackgroundTransparency = 0.1
 createWindow.ZIndex = 100
 createWindow.Visible = false
@@ -265,7 +271,7 @@ createTitle.Parent = createWindow
 createTitle.Size = UDim2.new(1, 0, 0, 40)
 createTitle.BackgroundTransparency = 1
 createTitle.Text = "📁 CREATE MACRO"
-createTitle.TextColor3 = colors.text
+createTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 createTitle.Font = Enum.Font.GothamBold
 createTitle.TextSize = 18
 createTitle.ZIndex = 101
@@ -324,7 +330,7 @@ listWindow.Name = "ListWindow"
 listWindow.Parent = player.PlayerGui
 listWindow.Size = UDim2.new(0, 320, 0, 320)
 listWindow.Position = UDim2.new(0.5, -160, 0.5, -160)
-listWindow.BackgroundColor3 = colors.panelBg
+listWindow.BackgroundColor3 = colors.mainBg
 listWindow.BackgroundTransparency = 0.1
 listWindow.ZIndex = 100
 listWindow.Visible = false
@@ -339,7 +345,7 @@ listTitle.Parent = listWindow
 listTitle.Size = UDim2.new(1, 0, 0, 40)
 listTitle.BackgroundTransparency = 1
 listTitle.Text = "📋 LIST MACRO"
-listTitle.TextColor3 = colors.text
+listTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 listTitle.Font = Enum.Font.GothamBold
 listTitle.TextSize = 18
 listTitle.ZIndex = 101
@@ -414,191 +420,15 @@ local function refreshList()
     end
 end
 
--- ==========================================
--- ЭКСПОРТ ФУНКЦИЙ ДЛЯ main.lua
--- ==========================================
-local MacroAPI = {
-    -- Данные
-    macros = macros,
-    selectedMacro = selectedMacro,
-    isRecording = isRecording,
-    isPlaying = isPlaying,
-    
-    -- Функции для кнопок
-    create = function(parent, x, y)
-        local btn = Instance.new("TextButton")
-        btn.Parent = parent
-        btn.Size = UDim2.new(0, 100, 0, 30)
-        btn.Position = UDim2.new(0, x, 0, y)
-        btn.BackgroundColor3 = colors.button
-        btn.BackgroundTransparency = 0.1
-        btn.Text = "📁 CREATE"
-        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        btn.Font = Enum.Font.GothamBold
-        btn.TextSize = 12
-        
-        local btnCorner = Instance.new("UICorner")
-        btnCorner.CornerRadius = UDim.new(0, 6)
-        btnCorner.Parent = btn
-        
-        btn.MouseButton1Click:Connect(function()
-            overlay.Visible = true
-            createWindow.Visible = true
-        end)
-        
-        return btn
-    end,
-    
-    list = function(parent, x, y)
-        local btn = Instance.new("TextButton")
-        btn.Parent = parent
-        btn.Size = UDim2.new(0, 100, 0, 30)
-        btn.Position = UDim2.new(0, x, 0, y)
-        btn.BackgroundColor3 = colors.button
-        btn.BackgroundTransparency = 0.1
-        btn.Text = "📋 LIST"
-        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        btn.Font = Enum.Font.GothamBold
-        btn.TextSize = 12
-        
-        local btnCorner = Instance.new("UICorner")
-        btnCorner.CornerRadius = UDim.new(0, 6)
-        btnCorner.Parent = btn
-        
-        btn.MouseButton1Click:Connect(function()
-            if #macros == 0 then
-                showNotification("📋 Список пуст", 2)
-            else
-                refreshList()
-                overlay.Visible = true
-                listWindow.Visible = true
-            end
-        end)
-        
-        return btn
-    end,
-    
-    refresh = function(parent, x, y)
-        local btn = Instance.new("TextButton")
-        btn.Parent = parent
-        btn.Size = UDim2.new(0, 100, 0, 30)
-        btn.Position = UDim2.new(0, x, 0, y)
-        btn.BackgroundColor3 = colors.button
-        btn.BackgroundTransparency = 0.1
-        btn.Text = "🔄 REFRESH"
-        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        btn.Font = Enum.Font.GothamBold
-        btn.TextSize = 12
-        
-        local btnCorner = Instance.new("UICorner")
-        btnCorner.CornerRadius = UDim.new(0, 6)
-        btnCorner.Parent = btn
-        
-        btn.MouseButton1Click:Connect(function()
-            showNotification("🔄 Список обновлен", 1)
-            if listWindow.Visible then
-                refreshList()
-            end
-        end)
-        
-        return btn
-    end,
-    
-    load = function(parent, x, y)
-        local btn = Instance.new("TextButton")
-        btn.Parent = parent
-        btn.Size = UDim2.new(0, 100, 0, 30)
-        btn.Position = UDim2.new(0, x, 0, y)
-        btn.BackgroundColor3 = colors.button
-        btn.BackgroundTransparency = 0.1
-        btn.Text = "📂 LOAD"
-        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        btn.Font = Enum.Font.GothamBold
-        btn.TextSize = 12
-        
-        local btnCorner = Instance.new("UICorner")
-        btnCorner.CornerRadius = UDim.new(0, 6)
-        btnCorner.Parent = btn
-        
-        btn.MouseButton1Click:Connect(function()
-            if selectedMacro then
-                showNotification("📂 Загружен: " .. selectedMacro.name, 2)
-            else
-                showNotification("⚠️ Сначала выберите макрос", 2)
-            end
-        end)
-        
-        return btn
-    end,
-    
-    record = function(parent, x, y)
-        local btn = Instance.new("TextButton")
-        btn.Parent = parent
-        btn.Size = UDim2.new(0, 100, 0, 30)
-        btn.Position = UDim2.new(0, x, 0, y)
-        btn.BackgroundColor3 = colors.buttonAlt
-        btn.BackgroundTransparency = 0.1
-        btn.Text = "⏺️ RECORD"
-        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        btn.Font = Enum.Font.GothamBold
-        btn.TextSize = 12
-        
-        local btnCorner = Instance.new("UICorner")
-        btnCorner.CornerRadius = UDim.new(0, 6)
-        btnCorner.Parent = btn
-        
-        btn.MouseButton1Click:Connect(function()
-            if not isRecording then
-                startMacroRecording()
-                btn.Text = "⏹️ STOP"
-                btn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-            else
-                stopMacroRecording()
-                btn.Text = "⏺️ RECORD"
-                btn.BackgroundColor3 = colors.buttonAlt
-            end
-        end)
-        
-        return btn
-    end,
-    
-    start = function(parent, x, y)
-        local btn = Instance.new("TextButton")
-        btn.Parent = parent
-        btn.Size = UDim2.new(0, 100, 0, 30)
-        btn.Position = UDim2.new(0, x, 0, y)
-        btn.BackgroundColor3 = colors.button
-        btn.BackgroundTransparency = 0.1
-        btn.Text = "▶️ START"
-        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        btn.Font = Enum.Font.GothamBold
-        btn.TextSize = 12
-        
-        local btnCorner = Instance.new("UICorner")
-        btnCorner.CornerRadius = UDim.new(0, 6)
-        btnCorner.Parent = btn
-        
-        btn.MouseButton1Click:Connect(function()
-            if selectedMacro then
-                playMacro(selectedMacro)
-            else
-                showNotification("⚠️ Сначала выберите макрос", 2)
-            end
-        end)
-        
-        return btn
-    end
-}
-
 -- Обработчики окон
 createConfirm.MouseButton1Click:Connect(function()
     local name = createInput.Text
     if name and name ~= "" then
         table.insert(macros, createMacro(name))
-        showNotification("✨ Создан: " .. name, 2)
+        showNotification("✨ Макрос создан: " .. name, 2)
         createInput.Text = ""
     else
-        showNotification("⚠️ Введите имя", 2)
+        showNotification("⚠️ Введите имя макроса", 2)
     end
     overlay.Visible = false
     createWindow.Visible = false
@@ -614,5 +444,69 @@ listClose.MouseButton1Click:Connect(function()
     overlay.Visible = false
     listWindow.Visible = false
 end)
+
+-- ==========================================
+-- API ДЛЯ UI.LUA
+-- ==========================================
+local MacroAPI = {
+    -- Данные
+    getMacros = function() return macros end,
+    getSelected = function() return selectedMacro end,
+    isRecording = function() return isRecording end,
+    isPlaying = function() return isPlaying end,
+    
+    -- Действия
+    create = function()
+        overlay.Visible = true
+        createWindow.Visible = true
+        showNotification("📁 CREATE MACRO", 1)
+    end,
+    
+    list = function()
+        if #macros == 0 then
+            showNotification("📋 Список макросов пуст", 2)
+        else
+            refreshList()
+            overlay.Visible = true
+            listWindow.Visible = true
+            showNotification("📋 LIST MACRO", 1)
+        end
+    end,
+    
+    refresh = function()
+        if listWindow.Visible then
+            refreshList()
+        end
+        showNotification("🔄 Список обновлен", 1)
+    end,
+    
+    load = function()
+        if selectedMacro then
+            showNotification("📂 Загружен: " .. selectedMacro.name, 2)
+        else
+            showNotification("⚠️ Сначала выберите макрос в LIST", 2)
+        end
+    end,
+    
+    record = function(btn)
+        if not isRecording then
+            startMacroRecording()
+            btn.Text = "⏹️ STOP"
+            btn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+        else
+            stopMacroRecording()
+            btn.Text = "⏺️ RECORD"
+            btn.BackgroundColor3 = colors.button
+        end
+    end,
+    
+    start = function()
+        if selectedMacro then
+            playMacro(selectedMacro)
+        else
+            showNotification("⚠️ Сначала выберите макрос в LIST", 2)
+        end
+    end
+}
 
 return MacroAPI
