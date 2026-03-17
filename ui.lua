@@ -7,6 +7,12 @@ local player = Players.LocalPlayer
 local mouse = player:GetMouse()
 
 -- ==========================================
+-- ОПРЕДЕЛЕНИЕ ПЛАТФОРМЫ
+-- ==========================================
+local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+print(isMobile and "📱 МОБИЛЬНОЕ УСТРОЙСТВО" or "💻 ПК")
+
+-- ==========================================
 -- ЦВЕТА
 -- ==========================================
 local colors = {
@@ -32,7 +38,6 @@ local loopMode = false
 local useHotkey = false
 local selectedWave = "Easy"
 
--- Сохранение макросов
 local function saveMacros()
     local success, err = pcall(function()
         if writefile then
@@ -46,7 +51,6 @@ local function saveMacros()
     end
 end
 
--- Загрузка макросов
 local function loadMacros()
     local success, err = pcall(function()
         if readfile and isfile and isfile("zeexhub_macros.json") then
@@ -91,7 +95,6 @@ stroke.Parent = mainFrame
 stroke.Thickness = 3
 stroke.Color = Color3.fromRGB(255, 0, 0)
 
--- RGB АНИМАЦИЯ
 local hue = 0
 RunService.RenderStepped:Connect(function()
     hue = (hue + 0.005) % 1
@@ -145,6 +148,7 @@ hideBtn.Text = "−"
 hideBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 hideBtn.Font = Enum.Font.GothamBold
 hideBtn.TextSize = 18
+hideBtn.ZIndex = 3
 
 local hideCorner = Instance.new("UICorner")
 hideCorner.CornerRadius = UDim.new(0, 6)
@@ -159,20 +163,24 @@ closeBtn.Text = "✕"
 closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 closeBtn.Font = Enum.Font.GothamBold
 closeBtn.TextSize = 14
+closeBtn.ZIndex = 3
 
 local closeCorner = Instance.new("UICorner")
 closeCorner.CornerRadius = UDim.new(0, 6)
 closeCorner.Parent = closeBtn
 
--- ПЕРЕТАСКИВАНИЕ
+-- ==========================================
+-- УНИВЕРСАЛЬНОЕ ПЕРЕТАСКИВАНИЕ (ПК + МОБИЛКА)
+-- ==========================================
 local dragging = false
-local dragInput, mousePos, framePos
+local dragStart = nil
+local startPos = nil
 
 titleBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragging = true
-        mousePos = input.Position
-        framePos = mainFrame.Position
+        dragStart = input.Position
+        startPos = mainFrame.Position
         
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
@@ -183,24 +191,35 @@ titleBar.InputBegan:Connect(function(input)
 end)
 
 titleBar.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement then
-        dragInput = input
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        local delta = input.Position - mousePos
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
         mainFrame.Position = UDim2.new(
-            framePos.X.Scale,
-            framePos.X.Offset + delta.X,
-            framePos.Y.Scale,
-            framePos.Y.Offset + delta.Y
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
         )
     end
 end)
 
+-- ДЛЯ ПК (если тач не сработал)
+if not isMobile then
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            mainFrame.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+end
+
+-- ==========================================
 -- КНОПКА ОТКРЫТИЯ (TAB)
+-- ==========================================
 local tabButton = Instance.new("TextButton")
 tabButton.Parent = screenGui
 tabButton.Size = UDim2.new(0, 40, 0, 40)
@@ -217,21 +236,49 @@ local tabCorner = Instance.new("UICorner")
 tabCorner.CornerRadius = UDim.new(0, 10)
 tabCorner.Parent = tabButton
 
+-- ==========================================
+-- ОБРАБОТЧИКИ КНОПОК (ПК + МОБИЛКА)
+-- ==========================================
 hideBtn.MouseButton1Click:Connect(function()
     mainFrame.Visible = false
     tabButton.Visible = true
+    print("👁️ Меню скрыто")
 end)
 
 tabButton.MouseButton1Click:Connect(function()
     mainFrame.Visible = true
     tabButton.Visible = false
+    print("👁️ Меню открыто")
 end)
 
 closeBtn.MouseButton1Click:Connect(function()
     screenGui:Destroy()
+    print("❌ UI закрыт")
 end)
 
+-- ДЛЯ МОБИЛКИ (TouchTap)
+if isMobile then
+    hideBtn.TouchTap:Connect(function()
+        mainFrame.Visible = false
+        tabButton.Visible = true
+        print("👁️ Меню скрыто (тап)")
+    end)
+    
+    tabButton.TouchTap:Connect(function()
+        mainFrame.Visible = true
+        tabButton.Visible = false
+        print("👁️ Меню открыто (тап)")
+    end)
+    
+    closeBtn.TouchTap:Connect(function()
+        screenGui:Destroy()
+        print("❌ UI закрыт (тап)")
+    end)
+end
+
+-- ==========================================
 -- HOTKEY КНОПКА НА ЭКРАНЕ
+-- ==========================================
 local hotkeyButton = Instance.new("TextButton")
 hotkeyButton.Parent = screenGui
 hotkeyButton.Size = UDim2.new(0, 50, 0, 50)
@@ -260,6 +307,21 @@ hotkeyButton.MouseButton1Click:Connect(function()
         print("▶ Макро запущен")
     end
 end)
+
+if isMobile then
+    hotkeyButton.TouchTap:Connect(function()
+        isPlaying = not isPlaying
+        if isPlaying then
+            hotkeyButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+            hotkeyButton.Text = "⏸"
+            print("⏸ Макро остановлен (тап)")
+        else
+            hotkeyButton.BackgroundColor3 = colors.toggleOn
+            hotkeyButton.Text = "▶"
+            print("▶ Макро запущен (тап)")
+        end
+    end)
+end
 
 -- ==========================================
 -- ЛЕВАЯ ПАНЕЛЬ
@@ -336,7 +398,7 @@ mainContainer.Position = UDim2.new(0, 2, 0, 2)
 mainContainer.BackgroundTransparency = 1
 mainContainer.Visible = true
 mainContainer.ZIndex = 6
-mainContainer.ScrollBarThickness = 4
+mainContainer.ScrollBarThickness = isMobile and 8 or 4
 mainContainer.ScrollBarImageColor3 = colors.accent
 mainContainer.CanvasSize = UDim2.new(0, 0, 0, 600)
 mainContainer.BorderSizePixel = 0
@@ -348,7 +410,7 @@ macroContainer.Position = UDim2.new(0, 2, 0, 2)
 macroContainer.BackgroundTransparency = 1
 macroContainer.Visible = false
 macroContainer.ZIndex = 6
-macroContainer.ScrollBarThickness = 4
+macroContainer.ScrollBarThickness = isMobile and 8 or 4
 macroContainer.ScrollBarImageColor3 = colors.accent
 macroContainer.CanvasSize = UDim2.new(0, 0, 0, 600)
 macroContainer.BorderSizePixel = 0
@@ -360,7 +422,7 @@ settingsContainer.Position = UDim2.new(0, 2, 0, 2)
 settingsContainer.BackgroundTransparency = 1
 settingsContainer.Visible = false
 settingsContainer.ZIndex = 6
-settingsContainer.ScrollBarThickness = 4
+settingsContainer.ScrollBarThickness = isMobile and 8 or 4
 settingsContainer.ScrollBarImageColor3 = colors.accent
 settingsContainer.CanvasSize = UDim2.new(0, 0, 0, 300)
 settingsContainer.BorderSizePixel = 0
@@ -382,7 +444,7 @@ mainTitle.ZIndex = 7
 local function createToggle(text, yPos, parent)
     local toggleFrame = Instance.new("Frame")
     toggleFrame.Parent = parent
-    toggleFrame.Size = UDim2.new(1, -20, 0, 40)
+    toggleFrame.Size = UDim2.new(1, -20, 0, isMobile and 50 or 40)
     toggleFrame.Position = UDim2.new(0, 10, 0, yPos)
     toggleFrame.BackgroundColor3 = colors.panelBg
     toggleFrame.BackgroundTransparency = 0.5
@@ -406,14 +468,14 @@ local function createToggle(text, yPos, parent)
     toggleLabel.Text = text
     toggleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     toggleLabel.Font = Enum.Font.GothamBold
-    toggleLabel.TextSize = 13
+    toggleLabel.TextSize = isMobile and 14 or 13
     toggleLabel.TextXAlignment = Enum.TextXAlignment.Left
     toggleLabel.ZIndex = 8
     
     local switchTrack = Instance.new("Frame")
     switchTrack.Parent = toggleFrame
-    switchTrack.Size = UDim2.new(0, 45, 0, 22)
-    switchTrack.Position = UDim2.new(1, -55, 0.5, -11)
+    switchTrack.Size = UDim2.new(0, isMobile and 55 or 45, 0, isMobile and 28 or 22)
+    switchTrack.Position = UDim2.new(1, isMobile and -65 or -55, 0.5, isMobile and -14 or -11)
     switchTrack.BackgroundColor3 = colors.toggleBg
     switchTrack.ZIndex = 8
     
@@ -423,8 +485,8 @@ local function createToggle(text, yPos, parent)
     
     local switchButton = Instance.new("Frame")
     switchButton.Parent = switchTrack
-    switchButton.Size = UDim2.new(0, 18, 0, 18)
-    switchButton.Position = UDim2.new(0, 2, 0.5, -9)
+    switchButton.Size = UDim2.new(0, isMobile and 24 or 18, 0, isMobile and 24 or 18)
+    switchButton.Position = UDim2.new(0, 2, 0.5, isMobile and -12 or -9)
     switchButton.BackgroundColor3 = colors.toggleOff
     switchButton.ZIndex = 9
     
@@ -447,12 +509,12 @@ local function createToggle(text, yPos, parent)
     clickButton.Text = ""
     clickButton.ZIndex = 10
     
-    clickButton.MouseButton1Click:Connect(function()
-        isEnabled = not isEnabled
+    local function toggle()
+                isEnabled = not isEnabled
         
         if isEnabled then
             TweenService:Create(switchButton, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {
-                Position = UDim2.new(1, -20, 0.5, -9),
+                Position = UDim2.new(1, isMobile and -26 or -20, 0.5, isMobile and -12 or -9),
                 BackgroundColor3 = colors.toggleOn
             }):Play()
             
@@ -466,7 +528,7 @@ local function createToggle(text, yPos, parent)
             }):Play()
         else
             TweenService:Create(switchButton, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {
-                Position = UDim2.new(0, 2, 0.5, -9),
+                Position = UDim2.new(0, 2, 0.5, isMobile and -12 or -9),
                 BackgroundColor3 = colors.toggleOff
             }):Play()
             
@@ -481,14 +543,20 @@ local function createToggle(text, yPos, parent)
         end
         
         print(text .. ":", isEnabled and "ВКЛ ✅" or "ВЫКЛ ⭕")
-    end)
+    end
+    
+    clickButton.MouseButton1Click:Connect(toggle)
+    
+    if isMobile then
+        clickButton.TouchTap:Connect(toggle)
+    end
     
     clickButton.MouseEnter:Connect(function()
         TweenService:Create(toggleFrame, TweenInfo.new(0.2), {
             BackgroundTransparency = 0.3
         }):Play()
         TweenService:Create(switchButton, TweenInfo.new(0.2), {
-            Size = UDim2.new(0, 20, 0, 20)
+            Size = UDim2.new(0, isMobile and 26 or 20, 0, isMobile and 26 or 20)
         }):Play()
     end)
     
@@ -497,7 +565,7 @@ local function createToggle(text, yPos, parent)
             BackgroundTransparency = 0.5
         }):Play()
         TweenService:Create(switchButton, TweenInfo.new(0.2), {
-            Size = UDim2.new(0, 18, 0, 18)
+            Size = UDim2.new(0, isMobile and 24 or 18, 0, isMobile and 24 or 18)
         }):Play()
     end)
     
@@ -505,15 +573,15 @@ local function createToggle(text, yPos, parent)
 end
 
 createToggle("Auto Skip", 35, mainContainer)
-createToggle("Auto x2 Speed", 85, mainContainer)
-createToggle("Auto x3 Speed", 135, mainContainer)
-createToggle("Auto Play Again", 185, mainContainer)
+createToggle("Auto x2 Speed", isMobile and 95 or 85, mainContainer)
+createToggle("Auto x3 Speed", isMobile and 155 or 135, mainContainer)
+createToggle("Auto Play Again", isMobile and 215 or 185, mainContainer)
 
 -- AUTO MODE С ВЫБОРОМ ВОЛНЫ
 local autoModeFrame = Instance.new("Frame")
 autoModeFrame.Parent = mainContainer
-autoModeFrame.Size = UDim2.new(1, -20, 0, 40)
-autoModeFrame.Position = UDim2.new(0, 10, 0, 235)
+autoModeFrame.Size = UDim2.new(1, -20, 0, isMobile and 50 or 40)
+autoModeFrame.Position = UDim2.new(0, 10, 0, isMobile and 275 or 235)
 autoModeFrame.BackgroundColor3 = colors.panelBg
 autoModeFrame.BackgroundTransparency = 0.5
 autoModeFrame.ZIndex = 7
@@ -536,15 +604,15 @@ autoModeLabel.BackgroundTransparency = 1
 autoModeLabel.Text = "Auto Mode"
 autoModeLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 autoModeLabel.Font = Enum.Font.GothamBold
-autoModeLabel.TextSize = 13
+autoModeLabel.TextSize = isMobile and 14 or 13
 autoModeLabel.TextXAlignment = Enum.TextXAlignment.Left
 autoModeLabel.ZIndex = 8
 
 -- ОКНО ВЫБОРА ВОЛНЫ
 local waveSelector = Instance.new("Frame")
 waveSelector.Parent = autoModeFrame
-waveSelector.Size = UDim2.new(0, 180, 0, 30)
-waveSelector.Position = UDim2.new(1, -190, 0.5, -15)
+waveSelector.Size = UDim2.new(0, isMobile and 150 or 180, 0, isMobile and 38 or 30)
+waveSelector.Position = UDim2.new(1, isMobile and -160 or -190, 0.5, isMobile and -19 or -15)
 waveSelector.BackgroundColor3 = colors.toggleBg
 waveSelector.BackgroundTransparency = 0.3
 waveSelector.ZIndex = 8
@@ -561,7 +629,7 @@ waveLabel.BackgroundTransparency = 1
 waveLabel.Text = "Easy"
 waveLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
 waveLabel.Font = Enum.Font.Gotham
-waveLabel.TextSize = 12
+waveLabel.TextSize = isMobile and 13 or 12
 waveLabel.TextXAlignment = Enum.TextXAlignment.Left
 waveLabel.ZIndex = 9
 
@@ -579,13 +647,13 @@ waveArrow.ZIndex = 9
 -- ВЫПАДАЮЩИЙ СПИСОК ВОЛН
 local waveDropdown = Instance.new("ScrollingFrame")
 waveDropdown.Parent = mainContainer
-waveDropdown.Size = UDim2.new(0, 180, 0, 200)
-waveDropdown.Position = UDim2.new(1, -195, 0, 280)
+waveDropdown.Size = UDim2.new(0, isMobile and 150 or 180, 0, 200)
+waveDropdown.Position = UDim2.new(1, isMobile and -165 or -195, 0, isMobile and 330 or 280)
 waveDropdown.BackgroundColor3 = colors.mainBg
 waveDropdown.BackgroundTransparency = 0.1
 waveDropdown.Visible = false
 waveDropdown.ZIndex = 50
-waveDropdown.ScrollBarThickness = 3
+waveDropdown.ScrollBarThickness = isMobile and 6 : 3
 waveDropdown.ScrollBarImageColor3 = colors.accent
 waveDropdown.CanvasSize = UDim2.new(0, 0, 0, 240)
 waveDropdown.BorderSizePixel = 0
@@ -605,8 +673,8 @@ local waves = {"Easy", "Normal", "Hard", "Insane", "Impossible", "Apocalypse"}
 for i, wave in ipairs(waves) do
     local waveItem = Instance.new("Frame")
     waveItem.Parent = waveDropdown
-    waveItem.Size = UDim2.new(1, -10, 0, 35)
-    waveItem.Position = UDim2.new(0, 5, 0, (i-1) * 40 + 5)
+    waveItem.Size = UDim2.new(1, -10, 0, isMobile and 38 or 35)
+    waveItem.Position = UDim2.new(0, 5, 0, (i-1) * (isMobile and 40 or 40) + 5)
     waveItem.BackgroundColor3 = colors.panelBg
     waveItem.BackgroundTransparency = 0.5
     waveItem.ZIndex = 51
@@ -623,7 +691,7 @@ for i, wave in ipairs(waves) do
     waveItemLabel.Text = wave
     waveItemLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     waveItemLabel.Font = Enum.Font.GothamBold
-    waveItemLabel.TextSize = 12
+    waveItemLabel.TextSize = isMobile and 13 or 12
     waveItemLabel.TextXAlignment = Enum.TextXAlignment.Left
     waveItemLabel.ZIndex = 52
     
@@ -634,13 +702,19 @@ for i, wave in ipairs(waves) do
     waveItemBtn.Text = ""
     waveItemBtn.ZIndex = 53
     
-    waveItemBtn.MouseButton1Click:Connect(function()
+    local function selectWave()
         selectedWave = wave
         waveLabel.Text = wave
         waveLabel.TextColor3 = colors.toggleOn
         waveDropdown.Visible = false
         print("✅ Выбрана волна:", wave)
-    end)
+    end
+    
+    waveItemBtn.MouseButton1Click:Connect(selectWave)
+    
+    if isMobile then
+        waveItemBtn.TouchTap:Connect(selectWave)
+    end
     
     waveItemBtn.MouseEnter:Connect(function()
         waveItem.BackgroundTransparency = 0.3
@@ -659,9 +733,15 @@ waveSelectorBtn.BackgroundTransparency = 1
 waveSelectorBtn.Text = ""
 waveSelectorBtn.ZIndex = 10
 
-waveSelectorBtn.MouseButton1Click:Connect(function()
+local function toggleWaveDropdown()
     waveDropdown.Visible = not waveDropdown.Visible
-end)
+end
+
+waveSelectorBtn.MouseButton1Click:Connect(toggleWaveDropdown)
+
+if isMobile then
+    waveSelectorBtn.TouchTap:Connect(toggleWaveDropdown)
+end
 
 waveSelectorBtn.MouseEnter:Connect(function()
     waveSelector.BackgroundTransparency = 0.1
@@ -685,7 +765,6 @@ macroTitle.Font = Enum.Font.GothamBold
 macroTitle.TextSize = 16
 macroTitle.ZIndex = 7
 
--- ЛЕВАЯ ЧАСТЬ
 local macroLeftSection = Instance.new("Frame")
 macroLeftSection.Parent = macroContainer
 macroLeftSection.Size = UDim2.new(1, -10, 1, -35)
@@ -696,8 +775,8 @@ macroLeftSection.ZIndex = 7
 -- ОКНО СОЗДАНИЯ МАКРОСА
 local createWindow = Instance.new("Frame")
 createWindow.Parent = screenGui
-createWindow.Size = UDim2.new(0, 300, 0, 150)
-createWindow.Position = UDim2.new(0.5, -150, 0.5, -75)
+createWindow.Size = UDim2.new(0, isMobile and 280 or 300, 0, 150)
+createWindow.Position = UDim2.new(0.5, isMobile and -140 or -150, 0.5, -75)
 createWindow.BackgroundColor3 = colors.mainBg
 createWindow.BackgroundTransparency = 0.1
 createWindow.Visible = false
@@ -725,16 +804,16 @@ createTitle.ZIndex = 201
 
 local macroNameBox = Instance.new("TextBox")
 macroNameBox.Parent = createWindow
-macroNameBox.Size = UDim2.new(1, -40, 0, 35)
+macroNameBox.Size = UDim2.new(1, -40, 0, isMobile and 40 or 35)
 macroNameBox.Position = UDim2.new(0, 20, 0, 50)
 macroNameBox.BackgroundColor3 = colors.panelBg
 macroNameBox.BackgroundTransparency = 0.3
 macroNameBox.Text = ""
-macroNameBox.PlaceholderText = "Введите название макроса..."
+macroNameBox.PlaceholderText = "Введите название..."
 macroNameBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 macroNameBox.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
 macroNameBox.Font = Enum.Font.Gotham
-macroNameBox.TextSize = 14
+macroNameBox.TextSize = isMobile and 15 or 14
 macroNameBox.ZIndex = 201
 
 local boxCorner = Instance.new("UICorner")
@@ -743,13 +822,13 @@ boxCorner.Parent = macroNameBox
 
 local createConfirmBtn = Instance.new("TextButton")
 createConfirmBtn.Parent = createWindow
-createConfirmBtn.Size = UDim2.new(0, 120, 0, 35)
-createConfirmBtn.Position = UDim2.new(0.5, -125, 1, -45)
+createConfirmBtn.Size = UDim2.new(0, isMobile and 110 or 120, 0, isMobile and 40 or 35)
+createConfirmBtn.Position = UDim2.new(0.5, isMobile and -115 or -125, 1, -45)
 createConfirmBtn.BackgroundColor3 = colors.toggleOn
 createConfirmBtn.Text = "✓ CREATE"
 createConfirmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 createConfirmBtn.Font = Enum.Font.GothamBold
-createConfirmBtn.TextSize = 14
+createConfirmBtn.TextSize = isMobile and 13 or 14
 createConfirmBtn.ZIndex = 201
 
 local confirmCorner = Instance.new("UICorner")
@@ -758,20 +837,20 @@ confirmCorner.Parent = createConfirmBtn
 
 local createCancelBtn = Instance.new("TextButton")
 createCancelBtn.Parent = createWindow
-createCancelBtn.Size = UDim2.new(0, 120, 0, 35)
+createCancelBtn.Size = UDim2.new(0, isMobile and 110 or 120, 0, isMobile and 40 or 35)
 createCancelBtn.Position = UDim2.new(0.5, 5, 1, -45)
 createCancelBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 100)
 createCancelBtn.Text = "✕ CANCEL"
 createCancelBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 createCancelBtn.Font = Enum.Font.GothamBold
-createCancelBtn.TextSize = 14
+createCancelBtn.TextSize = isMobile and 13 or 14
 createCancelBtn.ZIndex = 201
 
 local cancelCorner = Instance.new("UICorner")
 cancelCorner.CornerRadius = UDim.new(0, 8)
 cancelCorner.Parent = createCancelBtn
 
--- ВЫПАДАЮЩИЙ СПИСОК
+-- ВЫПАДАЮЩИЙ СПИСОК МАКРОСОВ
 local macroDropdown = Instance.new("ScrollingFrame")
 macroDropdown.Parent = macroLeftSection
 macroDropdown.Size = UDim2.new(0, 200, 0, 150)
@@ -780,7 +859,7 @@ macroDropdown.BackgroundColor3 = colors.mainBg
 macroDropdown.BackgroundTransparency = 0.1
 macroDropdown.Visible = false
 macroDropdown.ZIndex = 50
-macroDropdown.ScrollBarThickness = 3
+macroDropdown.ScrollBarThickness = isMobile and 6 or 3
 macroDropdown.ScrollBarImageColor3 = colors.accent
 macroDropdown.CanvasSize = UDim2.new(0, 0, 0, 0)
 macroDropdown.BorderSizePixel = 0
@@ -805,8 +884,8 @@ local function updateMacroDropdown()
     for i, macro in ipairs(macros) do
         local macroItem = Instance.new("Frame")
         macroItem.Parent = macroDropdown
-        macroItem.Size = UDim2.new(1, -10, 0, 35)
-        macroItem.Position = UDim2.new(0, 5, 0, (i-1) * 40 + 5)
+        macroItem.Size = UDim2.new(1, -10, 0, isMobile and 38 or 35)
+        macroItem.Position = UDim2.new(0, 5, 0, (i-1) * (isMobile and 40 or 40) + 5)
         macroItem.BackgroundColor3 = colors.panelBg
         macroItem.BackgroundTransparency = 0.5
         macroItem.ZIndex = 51
@@ -823,7 +902,7 @@ local function updateMacroDropdown()
         macroLabel.Text = "📄 " .. macro.name
         macroLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
         macroLabel.Font = Enum.Font.GothamBold
-        macroLabel.TextSize = 12
+        macroLabel.TextSize = isMobile and 13 or 12
         macroLabel.TextXAlignment = Enum.TextXAlignment.Left
         macroLabel.ZIndex = 52
         
@@ -834,7 +913,7 @@ local function updateMacroDropdown()
         selectBtn.Text = ""
         selectBtn.ZIndex = 53
         
-        selectBtn.MouseButton1Click:Connect(function()
+        local function selectMacro()
             selectedMacro = macro.name
             for _, child in pairs(macroLeftSection:GetChildren()) do
                 if child.Name == "MacroSelector" then
@@ -847,7 +926,13 @@ local function updateMacroDropdown()
             end
             macroDropdown.Visible = false
             print("✅ Выбран макрос:", selectedMacro)
-        end)
+        end
+        
+        selectBtn.MouseButton1Click:Connect(selectMacro)
+        
+        if isMobile then
+            selectBtn.TouchTap:Connect(selectMacro)
+        end
         
         selectBtn.MouseEnter:Connect(function()
             macroItem.BackgroundTransparency = 0.3
@@ -858,11 +943,11 @@ local function updateMacroDropdown()
         end)
     end
     
-    macroDropdown.CanvasSize = UDim2.new(0, 0, 0, #macros * 40 + 10)
+    macroDropdown.CanvasSize = UDim2.new(0, 0, 0, #macros * (isMobile and 40 or 40) + 10)
 end
 
 -- ОБРАБОТЧИКИ CREATE WINDOW
-createConfirmBtn.MouseButton1Click:Connect(function()
+local function confirmCreate()
     local macroName = macroNameBox.Text
     if macroName ~= "" then
         table.insert(macros, {
@@ -873,27 +958,38 @@ createConfirmBtn.MouseButton1Click:Connect(function()
         createWindow.Visible = false
         updateMacroDropdown()
         saveMacros()
+        macroNameBox
+                macroNameBox.Text = ""
     else
         print("❌ Введите название макроса!")
     end
-end)
+end
 
-createCancelBtn.MouseButton1Click:Connect(function()
+local function cancelCreate()
     createWindow.Visible = false
-end)
+    macroNameBox.Text = ""
+end
+
+createConfirmBtn.MouseButton1Click:Connect(confirmCreate)
+createCancelBtn.MouseButton1Click:Connect(cancelCreate)
+
+if isMobile then
+    createConfirmBtn.TouchTap:Connect(confirmCreate)
+    createCancelBtn.TouchTap:Connect(cancelCreate)
+end
 
 -- ФУНКЦИЯ ДЛЯ КНОПОК
 local function createMacroButton(text, yPos)
     local btn = Instance.new("TextButton")
     btn.Parent = macroLeftSection
-    btn.Size = UDim2.new(0, 110, 0, 35)
+    btn.Size = UDim2.new(0, 110, 0, isMobile and 40 or 35)
     btn.Position = UDim2.new(0, 5, 0, yPos)
     btn.BackgroundColor3 = colors.button
     btn.BackgroundTransparency = 0.2
     btn.Text = text
     btn.TextColor3 = Color3.fromRGB(255, 255, 255)
     btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 12
+    btn.TextSize = isMobile and 13 or 12
     btn.ZIndex = 8
     
     local corner = Instance.new("UICorner")
@@ -915,29 +1011,43 @@ end
 
 -- КНОПКА CREATE
 local createBtn = createMacroButton("📁 Create", 10)
-createBtn.MouseButton1Click:Connect(function()
+
+local function openCreateWindow()
     createWindow.Visible = true
     macroNameBox.Text = ""
-end)
+end
+
+createBtn.MouseButton1Click:Connect(openCreateWindow)
+
+if isMobile then
+    createBtn.TouchTap:Connect(openCreateWindow)
+end
 
 -- КНОПКА REFRESH
-local refreshBtn = createMacroButton("🔄 Refresh", 55)
-refreshBtn.MouseButton1Click:Connect(function()
+local refreshBtn = createMacroButton("🔄 Refresh", isMobile and 60 or 55)
+
+local function refreshMacros()
     updateMacroDropdown()
     print("🔄 Список обновлен")
-end)
+end
+
+refreshBtn.MouseButton1Click:Connect(refreshMacros)
+
+if isMobile then
+    refreshBtn.TouchTap:Connect(refreshMacros)
+end
 
 -- НАДПИСЬ "List"
 local listLabel = Instance.new("TextLabel")
 listLabel.Parent = macroLeftSection
-listLabel.Size = UDim2.new(0, 110, 0, 35)
-listLabel.Position = UDim2.new(0, 5, 0, 100)
+listLabel.Size = UDim2.new(0, 110, 0, isMobile and 40 or 35)
+listLabel.Position = UDim2.new(0, 5, 0, isMobile and 110 or 100)
 listLabel.BackgroundColor3 = colors.button
 listLabel.BackgroundTransparency = 0.2
 listLabel.Text = "📋 List"
 listLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 listLabel.Font = Enum.Font.GothamBold
-listLabel.TextSize = 12
+listLabel.TextSize = isMobile and 13 or 12
 listLabel.ZIndex = 8
 
 local listCorner = Instance.new("UICorner")
@@ -948,8 +1058,8 @@ listCorner.Parent = listLabel
 local macroSelector = Instance.new("Frame")
 macroSelector.Name = "MacroSelector"
 macroSelector.Parent = macroLeftSection
-macroSelector.Size = UDim2.new(0, 200, 0, 35)
-macroSelector.Position = UDim2.new(0, 125, 0, 100)
+macroSelector.Size = UDim2.new(0, 200, 0, isMobile and 40 or 35)
+macroSelector.Position = UDim2.new(0, 125, 0, isMobile and 110 or 100)
 macroSelector.BackgroundColor3 = colors.panelBg
 macroSelector.BackgroundTransparency = 0.5
 macroSelector.ZIndex = 8
@@ -966,7 +1076,7 @@ selectorLabel.BackgroundTransparency = 1
 selectorLabel.Text = "Выберите макрос..."
 selectorLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
 selectorLabel.Font = Enum.Font.Gotham
-selectorLabel.TextSize = 11
+selectorLabel.TextSize = isMobile and 12 or 11
 selectorLabel.TextXAlignment = Enum.TextXAlignment.Left
 selectorLabel.ZIndex = 9
 
@@ -988,10 +1098,16 @@ selectorBtn.BackgroundTransparency = 1
 selectorBtn.Text = ""
 selectorBtn.ZIndex = 10
 
-selectorBtn.MouseButton1Click:Connect(function()
+local function toggleMacroDropdown()
     macroDropdown.Visible = not macroDropdown.Visible
     updateMacroDropdown()
-end)
+end
+
+selectorBtn.MouseButton1Click:Connect(toggleMacroDropdown)
+
+if isMobile then
+    selectorBtn.TouchTap:Connect(toggleMacroDropdown)
+end
 
 selectorBtn.MouseEnter:Connect(function()
     macroSelector.BackgroundTransparency = 0.3
@@ -1005,7 +1121,7 @@ end)
 local function createWideToggle(text, yPos, callback)
     local toggleFrame = Instance.new("Frame")
     toggleFrame.Parent = macroLeftSection
-    toggleFrame.Size = UDim2.new(1, -15, 0, 40)
+    toggleFrame.Size = UDim2.new(1, -15, 0, isMobile and 50 or 40)
     toggleFrame.Position = UDim2.new(0, 5, 0, yPos)
     toggleFrame.BackgroundColor3 = colors.panelBg
     toggleFrame.BackgroundTransparency = 0.5
@@ -1023,14 +1139,14 @@ local function createWideToggle(text, yPos, callback)
     toggleLabel.Text = text
     toggleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     toggleLabel.Font = Enum.Font.GothamBold
-    toggleLabel.TextSize = 13
+    toggleLabel.TextSize = isMobile and 14 or 13
     toggleLabel.TextXAlignment = Enum.TextXAlignment.Left
     toggleLabel.ZIndex = 8
     
     local switchTrack = Instance.new("Frame")
     switchTrack.Parent = toggleFrame
-    switchTrack.Size = UDim2.new(0, 45, 0, 22)
-    switchTrack.Position = UDim2.new(1, -55, 0.5, -11)
+    switchTrack.Size = UDim2.new(0, isMobile and 55 or 45, 0, isMobile and 28 or 22)
+    switchTrack.Position = UDim2.new(1, isMobile and -65 or -55, 0.5, isMobile and -14 or -11)
     switchTrack.BackgroundColor3 = colors.toggleBg
     switchTrack.ZIndex = 8
     
@@ -1040,8 +1156,8 @@ local function createWideToggle(text, yPos, callback)
     
     local switchButton = Instance.new("Frame")
     switchButton.Parent = switchTrack
-    switchButton.Size = UDim2.new(0, 18, 0, 18)
-    switchButton.Position = UDim2.new(0, 2, 0.5, -9)
+    switchButton.Size = UDim2.new(0, isMobile and 24 or 18, 0, isMobile and 24 or 18)
+    switchButton.Position = UDim2.new(0, 2, 0.5, isMobile and -12 or -9)
     switchButton.BackgroundColor3 = colors.toggleOff
     switchButton.ZIndex = 9
     
@@ -1058,12 +1174,12 @@ local function createWideToggle(text, yPos, callback)
     clickButton.Text = ""
     clickButton.ZIndex = 10
     
-    clickButton.MouseButton1Click:Connect(function()
+    local function toggle()
         isEnabled = not isEnabled
         
         if isEnabled then
             TweenService:Create(switchButton, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {
-                Position = UDim2.new(1, -20, 0.5, -9),
+                Position = UDim2.new(1, isMobile and -26 or -20, 0.5, isMobile and -12 or -9),
                 BackgroundColor3 = colors.toggleOn
             }):Play()
             
@@ -1072,7 +1188,7 @@ local function createWideToggle(text, yPos, callback)
             }):Play()
         else
             TweenService:Create(switchButton, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {
-                Position = UDim2.new(0, 2, 0.5, -9),
+                Position = UDim2.new(0, 2, 0.5, isMobile and -12 or -9),
                 BackgroundColor3 = colors.toggleOff
             }):Play()
             
@@ -1086,36 +1202,42 @@ local function createWideToggle(text, yPos, callback)
         end
         
         print(text .. ":", isEnabled and "ВКЛ ✅" or "ВЫКЛ ⭕")
-    end)
+    end
+    
+    clickButton.MouseButton1Click:Connect(toggle)
+    
+    if isMobile then
+        clickButton.TouchTap:Connect(toggle)
+    end
     
     return toggleFrame
 end
 
 -- ПЕРЕКЛЮЧАТЕЛИ
-createWideToggle("⏺️ Record Macro", 145, function(enabled)
+createWideToggle("⏺️ Record Macro", isMobile and 160 or 145, function(enabled)
     isRecording = enabled
 end)
 
-createWideToggle("▶️ Play Macro", 195, function(enabled)
+createWideToggle("▶️ Play Macro", isMobile and 220 or 195, function(enabled)
     isPlaying = enabled
     if useHotkey then
         hotkeyButton.Visible = enabled
     end
 end)
 
-createWideToggle("⏱️ Time Placement", 245, function(enabled)
+createWideToggle("⏱️ Time Placement", isMobile and 280 or 245, function(enabled)
     print("Time Placement:", enabled)
 end)
 
-createWideToggle("📍 Unit Placement", 295, function(enabled)
+createWideToggle("📍 Unit Placement", isMobile and 340 or 295, function(enabled)
     print("Unit Placement:", enabled)
 end)
 
-createWideToggle("🔁 Loop Mode", 345, function(enabled)
+createWideToggle("🔁 Loop Mode", isMobile and 400 or 345, function(enabled)
     loopMode = enabled
 end)
 
-createWideToggle("⌨️ Hotkey", 395, function(enabled)
+createWideToggle("⌨️ Hotkey", isMobile and 460 or 395, function(enabled)
     useHotkey = enabled
     if enabled and isPlaying then
         hotkeyButton.Visible = true
@@ -1136,6 +1258,7 @@ settingsTitle.Text = "⚡ SETTINGS"
 settingsTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 settingsTitle.Font = Enum.Font.GothamBold
 settingsTitle.TextSize = 16
+settingsTitle.ZIndex = 7
 
 local settingsPlaceholder = Instance.new("TextLabel")
 settingsPlaceholder.Parent = settingsContainer
@@ -1147,28 +1270,42 @@ settingsPlaceholder.TextColor3 = Color3.fromRGB(200, 200, 255)
 settingsPlaceholder.TextTransparency = 0.3
 settingsPlaceholder.Font = Enum.Font.Gotham
 settingsPlaceholder.TextSize = 14
+settingsPlaceholder.ZIndex = 7
 
 -- ==========================================
 -- НАВИГАЦИЯ
 -- ==========================================
-mainBtn.MouseButton1Click:Connect(function()
+local function showMain()
     mainContainer.Visible = true
     macroContainer.Visible = false
     settingsContainer.Visible = false
-end)
+    print("📄 Открыта вкладка: MAIN")
+end
 
-macroBtn.MouseButton1Click:Connect(function()
+local function showMacro()
     mainContainer.Visible = false
     macroContainer.Visible = true
     settingsContainer.Visible = false
     updateMacroDropdown()
-end)
+    print("📄 Открыта вкладка: MACRO")
+end
 
-settingsBtn.MouseButton1Click:Connect(function()
+local function showSettings()
     mainContainer.Visible = false
     macroContainer.Visible = false
     settingsContainer.Visible = true
-end)
+    print("📄 Открыта вкладка: SETTINGS")
+end
+
+mainBtn.MouseButton1Click:Connect(showMain)
+macroBtn.MouseButton1Click:Connect(showMacro)
+settingsBtn.MouseButton1Click:Connect(showSettings)
+
+if isMobile then
+    mainBtn.TouchTap:Connect(showMain)
+    macroBtn.TouchTap:Connect(showMacro)
+    settingsBtn.TouchTap:Connect(showSettings)
+end
 
 -- ==========================================
 -- ФУТЕР
@@ -1183,13 +1320,63 @@ footer.TextColor3 = Color3.fromRGB(200, 180, 255)
 footer.TextTransparency = 0.2
 footer.Font = Enum.Font.Gotham
 footer.TextSize = 10
+footer.ZIndex = 7
 
--- ЗАГРУЖАЕМ СОХРАНЕННЫЕ МАКРОСЫ
+-- ==========================================
+-- АВТОСОХРАНЕНИЕ CANVAS SIZE ДЛЯ МОБИЛКИ
+-- ==========================================
+if isMobile then
+    mainContainer.CanvasSize = UDim2.new(0, 0, 0, 700)
+    macroContainer.CanvasSize = UDim2.new(0, 0, 0, 700)
+end
+
+-- ==========================================
+-- ЗАКРЫТИЕ ВЫПАДАЮЩИХ СПИСКОВ ПРИ КЛИКЕ ВНЕ
+-- ==========================================
+UserInputService.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        local mousePos = UserInputService:GetMouseLocation()
+        
+        -- Проверяем клик вне выпадающего списка волн
+        if waveDropdown.Visible then
+            local dropPos = waveDropdown.AbsolutePosition
+            local dropSize = waveDropdown.AbsoluteSize
+            
+            if mousePos.X < dropPos.X or mousePos.X > dropPos.X + dropSize.X or
+               mousePos.Y < dropPos.Y or mousePos.Y > dropPos.Y + dropSize.Y then
+                waveDropdown.Visible = false
+            end
+        end
+        
+        -- Проверяем клик вне выпадающего списка макросов
+        if macroDropdown.Visible then
+            local dropPos = macroDropdown.AbsolutePosition
+            local dropSize = macroDropdown.AbsoluteSize
+            
+            if mousePos.X < dropPos.X or mousePos.X > dropPos.X + dropSize.X or
+               mousePos.Y < dropPos.Y or mousePos.Y > dropPos.Y + dropSize.Y then
+                macroDropdown.Visible = false
+            end
+        end
+    end
+end)
+
+-- ==========================================
+-- ЗАГРУЗКА СОХРАНЕННЫХ МАКРОСОВ
+-- ==========================================
 loadMacros()
 updateMacroDropdown()
 
+-- ==========================================
+-- ФИНАЛЬНЫЙ ЛОГ
+-- ==========================================
+print("========================================")
 print("✅ UI ЗАГРУЖЕН ПОЛНОСТЬЮ")
+print("📱 Платформа:", isMobile and "МОБИЛЬНАЯ" or "ПК")
+print("🎮 Перетаскивание:", isMobile and "TOUCH" or "MOUSE")
 print("📌 Функционал MACRO готов")
 print("💾 Автосохранение включено")
 print("🌈 RGB обводка активирована")
 print("⚡ ZeexHub by zeenixxs")
+print("========================================")
+        
