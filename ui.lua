@@ -6,6 +6,12 @@ local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local mouse = player:GetMouse()
 
+-- ЗАГРУЗКА МАКРО СИСТЕМЫ
+local MacroSystem = loadstring(game:HttpGet("https://raw.githubusercontent.com/zeexHubLua/zeexHub/refs/heads/main/macroLogic.lua"))()
+local macroLogic = setmetatable({}, MacroSystem)
+
+print("✅ Макро система загружена")
+
 -- ==========================================
 -- ЦВЕТА
 -- ==========================================
