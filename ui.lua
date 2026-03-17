@@ -1,16 +1,28 @@
-local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-
 local player = Players.LocalPlayer
 local mouse = player:GetMouse()
 
 -- ==========================================
--- ЗАГРУЗКА МАКРО СИСТЕМЫ
+-- ЗАГРУЗКА МАКРО СИСТЕМЫ С ПРОВЕРКОЙ
 -- ==========================================
-local MacroSystem = loadstring(game:HttpGet("https://raw.githubusercontent.com/zeexHubLua/zeexHub/refs/heads/main/macroLogic.lua"))()
-local macroLogic = setmetatable({}, MacroSystem)
+print("🔄 Загружаю macroLogic.lua...")
+
+local success, MacroSystem = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/zeexHubLua/zeexHub/refs/heads/main/macroLogic.lua"))()
+end)
+
+if not success then
+    warn("❌ ОШИБКА ЗАГРУЗКИ macroLogic.lua:", MacroSystem)
+    warn("❌ Скрипт будет работать БЕЗ макросов!")
+    MacroSystem = nil
+else
+    print("✅ macroLogic.lua загружен успешно!")
+end
+
+local macroLogic = MacroSystem and setmetatable({}, MacroSystem) or nil
+
+if not macroLogic then
+    warn("⚠️ МАКРОСЫ ОТКЛЮЧЕНЫ - проверь GitHub файл!")
+end
 
 -- ==========================================
 -- ЦВЕТА
