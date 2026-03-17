@@ -7,6 +7,20 @@ local player = Players.LocalPlayer
 local mouse = player:GetMouse()
 
 -- ==========================================
+-- ЗАГРУЗКА МАКРО СИСТЕМЫ
+-- ==========================================
+local MacroSystem = loadstring(game:HttpGet("https://raw.githubusercontent.com/zeexHubLua/zeexHub/refs/heads/main/macroLogic.lua"))()
+local macroLogic = setmetatable({}, MacroSystem)
+
+-- ==========================================
+-- ЦВЕТА
+-- ==========================================
+local colors = {
+    mainBg = Color3.fromRGB(15, 0, 25),
+    panelBg = Color3.fromRGB(25, 0, 40),
+    -- и т.д.
+
+-- ==========================================
 -- ЦВЕТА
 -- ==========================================
 local colors = {
