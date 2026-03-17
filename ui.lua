@@ -1,42 +1,34 @@
-print("🔄 СТАРТ ТЕСТА")
+print("========== ТЕСТ НАЧАТ ==========")
+warn("⚠️ ЭТО ПРЕДУПРЕЖДЕНИЕ")
+print("✅ Executor работает!")
+print("✅ Player:", game.Players.LocalPlayer.Name)
 
-local Players = game:GetService("Players")
-local player = Players.LocalPlayer
-
-print("✅ Player:", player.Name)
-
--- Удаляем старый UI
-if player.PlayerGui:FindFirstChild("ZeexHub") then
-    player.PlayerGui.ZeexHub:Destroy()
-    print("🗑️ Старый UI удален")
-end
-
-wait(0.5)
-
--- Создаем тестовое окно
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "ZeexHub"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = player.PlayerGui
+-- Создаём GUI
+local sg = Instance.new("ScreenGui")
+sg.Parent = game.Players.LocalPlayer.PlayerGui
+print("✅ ScreenGui создан")
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 300, 0, 200)
-frame.Position = UDim2.new(0.5, -150, 0.5, -100)
-frame.BackgroundColor3 = Color3.fromRGB(15, 0, 25)
-frame.Parent = screenGui
+frame.Parent = sg
+frame.Size = UDim2.new(0, 500, 0, 300)
+frame.Position = UDim2.new(0.5, -250, 0.5, -150)
+frame.BackgroundColor3 = Color3.new(1, 0, 0) -- КРАСНЫЙ!
+frame.BorderSizePixel = 5
+frame.BorderColor3 = Color3.new(0, 1, 0) -- ЗЕЛЁНАЯ ОБВОДКА!
+print("✅ Frame создан")
 
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 15)
-corner.Parent = frame
+local text = Instance.new("TextLabel")
+text.Parent = frame
+text.Size = UDim2.new(1, 0, 1, 0)
+text.BackgroundTransparency = 1
+text.Text = "ЕСЛИ ВИДИШЬ МЕНЯ - ВСЁ РАБОТАЕТ!"
+text.TextColor3 = Color3.new(1, 1, 1)
+text.TextSize = 20
+text.Font = Enum.Font.GothamBold
+text.TextWrapped = true
+print("✅ TextLabel создан")
 
-local label = Instance.new("TextLabel")
-label.Size = UDim2.new(1, 0, 1, 0)
-label.BackgroundTransparency = 1
-label.Text = "✅ UI РАБОТАЕТ!"
-label.TextColor3 = Color3.fromRGB(0, 255, 150)
-label.TextSize = 24
-label.Font = Enum.Font.GothamBold
-label.Parent = frame
-
-print("✅ ТЕСТОВОЕ ОКНО СОЗДАНО")
-print("📍 Проверь центр экрана!")
+print("========== ТЕСТ ЗАВЕРШЁН ==========")
+print("📍 СМОТРИ В ЦЕНТР ЭКРАНА!")
+print("🔴 Должен быть КРАСНЫЙ прямоугольник")
+print("🟢 С ЗЕЛЁНОЙ обводкой")
