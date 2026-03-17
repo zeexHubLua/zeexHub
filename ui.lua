@@ -1,4 +1,3 @@
-
 -- ==========================================
 -- ZEEXHUB UI - ПК ВЕРСИЯ
 -- ==========================================
@@ -38,11 +37,22 @@ local useHotkey = false
 local selectedWave = "Easy"
 
 local function saveMacros()
+    if not (writefile and type(writefile) == "function") then
+        print("⚠️ Функция writefile недоступна - макросы не сохранены")
+        return
+    end
+    
     local success, err = pcall(function()
-        if writefile then
+        if macros and #macros > 0 then
             local data = game:GetService("HttpService"):JSONEncode(macros)
-            writefile("zeexhub_macros.json", data)
-            print("✅ Макросы сохранены")
+            if data and type(data) == "string" then
+                writefile("zeexhub_macros.json", data)
+                print("✅ Макросы сохранены")
+            else
+                warn("❌ Ошибка: JSONEncode вернул nil")
+            end
+        else
+            print("ℹ️ Нет макросов для сохранения")
         end
     end)
     if not success then
@@ -51,11 +61,27 @@ local function saveMacros()
 end
 
 local function loadMacros()
+    if not (readfile and isfile and type(readfile) == "function" and type(isfile) == "function") then
+        print("⚠️ Функции файловой системы недоступны")
+        return
+    end
+    
     local success, err = pcall(function()
-        if readfile and isfile and isfile("zeexhub_macros.json") then
+        if isfile("zeexhub_macros.json") then
             local data = readfile("zeexhub_macros.json")
-            macros = game:GetService("HttpService"):JSONDecode(data)
-            print("✅ Макросы загружены:", #macros, "шт.")
+            if data and type(data) == "string" and #data > 0 then
+                local decoded = game:GetService("HttpService"):JSONDecode(data)
+                if decoded and type(decoded) == "table" then
+                    macros = decoded
+                    print("✅ Макросы загружены:", #macros, "шт.")
+                else
+                    warn("❌ Ошибка: JSONDecode вернул некорректные данные")
+                end
+            else
+                print("ℹ️ Файл пуст или недоступен")
+            end
+        else
+            print("ℹ️ Файл макросов не найден - создастся при сохранении")
         end
     end)
     if not success then
