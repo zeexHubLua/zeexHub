@@ -1699,7 +1699,6 @@ print("✅ Auto Functions loaded!")
 print("   • Auto Skip:", toggleStates["Auto Skip"] and "ON" or "OFF")
 print("   • Auto x2 Speed:", toggleStates["Auto x2 Speed"] and "ON" or "OFF")
 print("   • Auto x3 Speed:", toggleStates["Auto x3 Speed"] and "ON" or "OFF")
-
 print("========================================")
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
 print("⚡ by zeenixxs")
