@@ -1576,7 +1576,7 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - КЛИКАЕТ КНОПКУ SKIP
+-- AUTO SKIP - TOGGLE В ИГРЕ
 -- ==========================================
 
 local RunService = game:GetService("RunService")
@@ -1585,21 +1585,58 @@ local gui = player:WaitForChild("PlayerGui")
 
 task.wait(3)
 
--- Поиск кнопки Skip
-local function findSkipButton()
-    local ok, btn = pcall(function()
-        return gui.GameGui.Screen.Middle.SandboxMenu.SandboxMenu.Frame.Items.Items.Waves.GoToWave.Items.Items.Button
-    end)
-    
-    if ok and btn and btn.Parent then
-        return btn
+-- Ищем TOGGLE Auto Skip в игре
+local function findAutoSkipToggle()
+    for _, obj in pairs(gui:GetDescendants()) do
+        -- Ищем TextLabel с "Auto Skip"
+        if obj:IsA("TextLabel") and obj.Text == "Auto Skip" then
+            -- Проверяем что это НЕ наш GUI
+            if not obj:IsDescendantOf(screenGui) then
+                local parent = obj.Parent
+                if parent then
+                    -- Ищем toggle кнопку (обычно рядом Frame с knob)
+                    for _, child in pairs(parent:GetDescendants()) do
+                        if child:IsA("TextButton") and child.Text == "" then
+                            return child, parent
+                        end
+                    end
+                end
+            end
+        end
     end
-    
-    return nil
+    return nil, nil
 end
 
--- Клик через getconnections
-local function clickSkip(button)
+-- Проверяем включён ли toggle (по позиции knob или цвету)
+local function isToggleOn(toggleFrame)
+    if not toggleFrame then return false end
+    
+    -- Ищем knob (обычно Frame внутри Frame)
+    for _, child in pairs(toggleFrame:GetDescendants()) do
+        if child:IsA("Frame") and child.Name:lower():find("knob") or child.Name == "Frame" then
+            -- Проверяем позицию
+            if child.Position.X.Scale > 0.5 or child.Position.X.Offset > 20 then
+                return true  -- Справа = ON
+            end
+        end
+    end
+    
+    -- Альтернатива: проверка по цвету track
+    for _, child in pairs(toggleFrame:GetChildren()) do
+        if child:IsA("Frame") then
+            local color = child.BackgroundColor3
+            -- Зелёный/синий = ON, серый = OFF
+            if color.G > 0.5 or color.B > 0.5 then
+                return true
+            end
+        end
+    end
+    
+    return false
+end
+
+-- Клик по toggle
+local function clickToggle(button)
     if not button or not button.Parent or not button.Visible then
         return false
     end
@@ -1624,78 +1661,87 @@ local function clickSkip(button)
 end
 
 -- Переменные
-local skipButton = nil
-local lastClick = 0
-local clicksMade = 0
-local CLICK_INTERVAL = 0.3  -- Клик каждые 0.3 сек
+local autoSkipToggle = nil
+local autoSkipFrame = nil
+local lastCheck = 0
+local hasClicked = false
+local CHECK_INTERVAL = 2.0
 
 -- Главный цикл
 local conn
 conn = RunService.Heartbeat:Connect(function()
     if not toggleStates or not toggleStates["Auto Skip"] then
-        if clicksMade > 0 then
-            clicksMade = 0
-        end
+        hasClicked = false
         return
     end
     
     local now = tick()
     
-    if now - lastClick < CLICK_INTERVAL then
+    if now - lastCheck < CHECK_INTERVAL then
         return
     end
     
-    -- Ищем кнопку
-    if not skipButton or not skipButton.Parent then
-        skipButton = findSkipButton()
+    lastCheck = now
+    
+    -- Ищем toggle
+    if not autoSkipToggle or not autoSkipToggle.Parent then
+        autoSkipToggle, autoSkipFrame = findAutoSkipToggle()
+        hasClicked = false
+        
+        if autoSkipToggle and toggleStates["Notifications"] then
+            print("🔍 [AUTO SKIP] Toggle найден!")
+            print("   Path:", autoSkipToggle:GetFullName())
+        end
     end
     
-    -- Кликаем если кнопка видна
-    if skipButton and skipButton.Visible and skipButton.Active then
-        if clickSkip(skipButton) then
-            lastClick = now
-            clicksMade = clicksMade + 1
+    if not autoSkipToggle or not autoSkipToggle.Visible then
+        return
+    end
+    
+    -- Проверяем состояние
+    local isOn = isToggleOn(autoSkipFrame)
+    
+    if not isOn then
+        -- Toggle выключен - ВКЛЮЧАЕМ
+        if clickToggle(autoSkipToggle) then
+            hasClicked = true
             
-            if toggleStates["Notifications"] and clicksMade % 5 == 1 then
-                warn(string.format("⏭️ [AUTO SKIP] Кликов: %d", clicksMade))
+            if toggleStates["Notifications"] then
+                warn("⏭️ [AUTO SKIP] ВКЛЮЧЁН! (toggle On)")
             end
+            
+            -- Ждём чтобы toggle применился
+            task.wait(0.5)
         end
     else
-        if clicksMade > 0 then
-            if toggleStates["Notifications"] then
-                print(string.format("✅ [AUTO SKIP] Завершено (%d кликов)", clicksMade))
-            end
-            clicksMade = 0
+        -- Toggle включён - всё ок
+        if hasClicked and toggleStates["Notifications"] then
+            print("✅ [AUTO SKIP] Работает!")
+            hasClicked = false
         end
     end
 end)
 
--- Обновление кнопки
-task.spawn(function()
-    while task.wait(2) do
-        if toggleStates and toggleStates["Auto Skip"] then
-            local old = skipButton
-            skipButton = findSkipButton()
-            
-            if skipButton and skipButton ~= old then
-                clicksMade = 0
-            end
-        end
-    end
+-- Обновление при изменении GUI
+gui.DescendantAdded:Connect(function()
+    task.wait(1)
+    autoSkipToggle = nil
+    autoSkipFrame = nil
 end)
 
 -- Респавн
 player.CharacterAdded:Connect(function()
     task.wait(3)
-    skipButton = nil
-    clicksMade = 0
-    lastClick = 0
+    autoSkipToggle = nil
+    autoSkipFrame = nil
+    hasClicked = false
+    lastCheck = 0
 end)
 
 print("========================================")
-print("✅ AUTO SKIP LOADED")
-print("   Кликает кнопку Skip волны")
-print("   Интервал:", CLICK_INTERVAL, "сек")
+print("✅ AUTO SKIP READY")
+print("   Ищет toggle Auto Skip в игре")
+print("   Включает 1 раз если Off")
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
