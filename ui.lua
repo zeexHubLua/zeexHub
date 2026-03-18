@@ -1576,94 +1576,127 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- DEBUG - НАЙДЁМ КНОПКУ ИГРЫ
+-- AUTO SKIP - ФИНАЛЬНАЯ ВЕРСИЯ
 -- ==========================================
 
-task.wait(5)
-
-print("========================================")
-print("🔍 ПОИСК КНОПКИ AUTO SKIP В ИГРЕ...")
-print("========================================")
-
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = game:GetService("Players").LocalPlayer
 local gui = player:WaitForChild("PlayerGui")
 
--- Ищем кнопку Skip в ИГРЕ (не в нашем GUI)
-local function findGameSkipButton()
-    for _, obj in pairs(gui:GetDescendants()) do
-        if obj:IsA("TextButton") or obj:IsA("ImageButton") then
-            local path = obj:GetFullName()
-            
-            -- ТВОИ ДАННЫЕ: Button в Items, размер ~103x26
-            if obj.Name == "Button" and obj.Parent and obj.Parent.Name == "Items" then
-                local size = obj.AbsoluteSize
-                if size.X > 90 and size.X < 120 and size.Y > 20 and size.Y < 35 then
-                    print("✅ НАШЁЛ SKIP КНОПКУ!")
-                    print("   Path:", path)
-                    print("   Size:", size.X .. "x" .. size.Y)
-                    print("   Position:", obj.AbsolutePosition.X .. "," .. obj.AbsolutePosition.Y)
-                    print("   Visible:", obj.Visible)
-                    print("   Active:", obj.Active)
-                    return obj
+task.wait(3)
+
+-- Поиск кнопки Skip (ТОЧНЫЙ путь который нашли)
+local function findSkipButton()
+    local path = "GameGui.Screen.Middle.SandboxMenu.SandboxMenu.Frame.Items.Items.Waves.GoToWave.Items.Items.Button"
+    local parts = string.split(path, ".")
+    
+    local current = gui
+    for _, part in ipairs(parts) do
+        current = current:FindFirstChild(part)
+        if not current then return nil end
+    end
+    
+    return current
+end
+
+-- Функция клика (ВСЕ методы сразу)
+local function brutalClick(button)
+    if not button or not button.Parent then return false end
+    if not button.Visible or not button.Active then return false end
+    
+    local success = false
+    
+    -- Метод 1: getconnections
+    pcall(function()
+        for _, conn in pairs(getconnections(button.MouseButton1Click)) do
+            conn:Fire()
+            success = true
+        end
+    end)
+    
+    -- Метод 2: Activated
+    pcall(function()
+        for _, conn in pairs(getconnections(button.Activated)) do
+            conn:Fire()
+            success = true
+        end
+    end)
+    
+    -- Метод 3: firesignal
+    pcall(function()
+        firesignal(button.MouseButton1Click)
+        success = true
+    end)
+    
+    -- Метод 4: VirtualInputManager
+    pcall(function()
+        local pos = button.AbsolutePosition
+        local size = button.AbsoluteSize
+        local x, y = pos.X + size.X/2, pos.Y + size.Y/2
+        
+        VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 0)
+        task.wait(0.03)
+        VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 0)
+        success = true
+    end)
+    
+    return success
+end
+
+-- Таймеры
+local lastClick = 0
+local lastRefresh = 0
+local skipButton = nil
+local CLICK_INTERVAL = 0.5
+local REFRESH_INTERVAL = 5.0
+
+-- Главный цикл
+local connection
+connection = RunService.Heartbeat:Connect(function()
+    if not toggleStates then
+        connection:Disconnect()
+        return
+    end
+    
+    if not toggleStates["Auto Skip"] then return end
+    
+    local now = tick()
+    
+    -- Обновление кнопки каждые 5 секунд
+    if now - lastRefresh >= REFRESH_INTERVAL then
+        lastRefresh = now
+        skipButton = findSkipButton()
+    end
+    
+    -- Клик
+    if now - lastClick >= CLICK_INTERVAL then
+        if not skipButton or not skipButton.Parent then
+            skipButton = findSkipButton()
+        end
+        
+        if skipButton and skipButton.Visible then
+            if brutalClick(skipButton) then
+                lastClick = now
+                if toggleStates["Notifications"] then
+                    warn("⏭️ [AUTO SKIP] Clicked!")
                 end
             end
         end
     end
-    return nil
-end
+end)
 
-local skipBtn = findGameSkipButton()
+-- Респавн
+player.CharacterAdded:Connect(function()
+    task.wait(3)
+    skipButton = findSkipButton()
+    lastClick = 0
+end)
 
-if not skipBtn then
-    print("❌ КНОПКА НЕ НАЙДЕНА!")
-    print("🔍 Все кнопки Button в Items:")
-    
-    for _, obj in pairs(gui:GetDescendants()) do
-        if obj:IsA("GuiButton") and obj.Name == "Button" and obj.Parent and obj.Parent.Name == "Items" then
-            print("   -", obj:GetFullName(), "|", obj.AbsoluteSize.X .. "x" .. obj.AbsoluteSize.Y)
-        end
-    end
-else
-    print("========================================")
-    print("🎯 ТЕСТИРУЮ КЛИК...")
-    print("========================================")
-    
-    -- Пробуем все методы клика
-    local methods = {
-        function()
-            for _, conn in pairs(getconnections(skipBtn.MouseButton1Click)) do
-                conn:Fire()
-            end
-        end,
-        function()
-            for _, conn in pairs(getconnections(skipBtn.Activated)) do
-                conn:Fire()
-            end
-        end,
-        function()
-            firesignal(skipBtn.MouseButton1Click)
-        end,
-        function()
-            local vim = game:GetService("VirtualInputManager")
-            local pos = skipBtn.AbsolutePosition
-            local size = skipBtn.AbsoluteSize
-            vim:SendMouseButtonEvent(pos.X + size.X/2, pos.Y + size.Y/2, 0, true, skipBtn, 0)
-            task.wait(0.05)
-            vim:SendMouseButtonEvent(pos.X + size.X/2, pos.Y + size.Y/2, 0, false, skipBtn, 0)
-        end
-    }
-    
-    for i, method in ipairs(methods) do
-        local ok, err = pcall(method)
-        if ok then
-            print("✅ Метод", i, "- Успешно!")
-        else
-            print("❌ Метод", i, "- Ошибка:", err)
-        end
-        task.wait(1)
-    end
-end
-
+print("========================================")
+print("✅ AUTO SKIP LOADED")
+print("   Path: GameGui.Screen.Middle...")
+print("   Interval:", CLICK_INTERVAL, "sec")
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
