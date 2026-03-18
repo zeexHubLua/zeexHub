@@ -1576,72 +1576,44 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - БЕЗ СПАМА
+-- AUTO SKIP - КЛИКАЕТ КНОПКУ SKIP
 -- ==========================================
 
-local GuiService = game:GetService("GuiService")
 local RunService = game:GetService("RunService")
 local player = game:GetService("Players").LocalPlayer
 local gui = player:WaitForChild("PlayerGui")
 
 task.wait(3)
 
--- Ищем кнопку Auto Skip В ИГРЕ
-local function findGameAutoSkipButton()
-    for _, descendant in pairs(gui:GetDescendants()) do
-        if descendant:IsA("TextLabel") and descendant.Text == "Auto Skip" then
-            if not descendant:IsDescendantOf(screenGui) then
-                local parent = descendant.Parent
-                if parent then
-                    for _, child in pairs(parent:GetChildren()) do
-                        if child:IsA("TextButton") or child:IsA("ImageButton") then
-                            if child.Text == "Off" or child.Text == "On" or child.Text == "" then
-                                return child
-                            end
-                        end
-                    end
-                end
-            end
-        end
+-- Поиск кнопки Skip
+local function findSkipButton()
+    local ok, btn = pcall(function()
+        return gui.GameGui.Screen.Middle.SandboxMenu.SandboxMenu.Frame.Items.Items.Waves.GoToWave.Items.Items.Button
+    end)
+    
+    if ok and btn and btn.Parent then
+        return btn
     end
+    
     return nil
 end
 
--- Проверка состояния (Off или On)
-local function isButtonOff(button)
-    if not button then return false end
-    
-    if button.Text == "Off" then
-        return true
-    end
-    
-    if button.BackgroundColor3 then
-        local c = button.BackgroundColor3
-        if c.R < 0.5 and c.G < 0.5 and c.B < 0.5 then
-            return true
-        end
-    end
-    
-    return false
-end
-
--- КЛИК
-local function clickButton(button)
+-- Клик через getconnections
+local function clickSkip(button)
     if not button or not button.Parent or not button.Visible then
         return false
     end
     
     local success = false
     
-    button.Active = true
-    button.Selectable = true
-    
     pcall(function()
         for _, conn in pairs(getconnections(button.Activated)) do
             conn:Fire()
             success = true
         end
-        
+    end)
+    
+    pcall(function()
         for _, conn in pairs(getconnections(button.MouseButton1Click)) do
             conn:Fire()
             success = true
@@ -1651,73 +1623,63 @@ local function clickButton(button)
     return success
 end
 
--- СОСТОЯНИЯ
-local autoSkipButton = nil
-local lastState = nil  -- Храним последнее состояние (true = On, false = Off)
-local lastAction = 0
-local CHECK_INTERVAL = 1.5
+-- Переменные
+local skipButton = nil
+local lastClick = 0
+local clicksMade = 0
+local CLICK_INTERVAL = 0.3  -- Клик каждые 0.3 сек
 
 -- Главный цикл
 local conn
 conn = RunService.Heartbeat:Connect(function()
     if not toggleStates or not toggleStates["Auto Skip"] then
-        lastState = nil
+        if clicksMade > 0 then
+            clicksMade = 0
+        end
         return
     end
     
     local now = tick()
     
-    if now - lastAction < CHECK_INTERVAL then
+    if now - lastClick < CLICK_INTERVAL then
         return
     end
-    
-    lastAction = now
     
     -- Ищем кнопку
-    if not autoSkipButton or not autoSkipButton.Parent then
-        autoSkipButton = findGameAutoSkipButton()
-        lastState = nil
-        
-        if autoSkipButton and toggleStates["Notifications"] then
-            print("🔍 [AUTO SKIP] Найдена кнопка")
-        end
+    if not skipButton or not skipButton.Parent then
+        skipButton = findSkipButton()
     end
     
-    if not autoSkipButton or not autoSkipButton.Visible then
-        return
-    end
-    
-    -- Проверяем текущее состояние
-    local currentState = not isButtonOff(autoSkipButton)  -- true = On, false = Off
-    
-    -- УСЛОВИЕ: кликаем ТОЛЬКО если состояние изменилось с On на Off
-    if lastState == true and currentState == false then
-        -- Кнопка была On, теперь Off — ВКЛЮЧАЕМ
-        if clickButton(autoSkipButton) then
-            if toggleStates["Notifications"] then
-                warn("⏭️ [AUTO SKIP] Включён (было Off)")
+    -- Кликаем если кнопка видна
+    if skipButton and skipButton.Visible and skipButton.Active then
+        if clickSkip(skipButton) then
+            lastClick = now
+            clicksMade = clicksMade + 1
+            
+            if toggleStates["Notifications"] and clicksMade % 5 == 1 then
+                warn(string.format("⏭️ [AUTO SKIP] Кликов: %d", clicksMade))
             end
-            lastState = true  -- Предполагаем что включили
-        end
-    elseif lastState == nil then
-        -- Первая проверка — сразу включаем если Off
-        if currentState == false then
-            if clickButton(autoSkipButton) then
-                if toggleStates["Notifications"] then
-                    warn("⏭️ [AUTO SKIP] Включён (первый раз)")
-                end
-                lastState = true
-            end
-        else
-            lastState = true
         end
     else
-        -- Просто обновляем состояние
-        if lastState ~= currentState then
+        if clicksMade > 0 then
             if toggleStates["Notifications"] then
-                print(string.format("🔄 [AUTO SKIP] Состояние: %s", currentState and "On" or "Off"))
+                print(string.format("✅ [AUTO SKIP] Завершено (%d кликов)", clicksMade))
             end
-            lastState = currentState
+            clicksMade = 0
+        end
+    end
+end)
+
+-- Обновление кнопки
+task.spawn(function()
+    while task.wait(2) do
+        if toggleStates and toggleStates["Auto Skip"] then
+            local old = skipButton
+            skipButton = findSkipButton()
+            
+            if skipButton and skipButton ~= old then
+                clicksMade = 0
+            end
         end
     end
 end)
@@ -1725,15 +1687,15 @@ end)
 -- Респавн
 player.CharacterAdded:Connect(function()
     task.wait(3)
-    autoSkipButton = nil
-    lastState = nil
-    lastAction = 0
+    skipButton = nil
+    clicksMade = 0
+    lastClick = 0
 end)
 
 print("========================================")
-print("✅ AUTO SKIP LOADED (NO SPAM)")
-print("   Кликает только при Off -> On")
-print("   Интервал проверки:", CHECK_INTERVAL, "сек")
+print("✅ AUTO SKIP LOADED")
+print("   Кликает кнопку Skip волны")
+print("   Интервал:", CLICK_INTERVAL, "сек")
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
