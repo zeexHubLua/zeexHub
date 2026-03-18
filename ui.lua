@@ -1576,104 +1576,119 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - ПРАВИЛЬНАЯ ВЕРСИЯ
+-- AUTO SKIP - РАБОЧАЯ ВЕРСИЯ
 -- ==========================================
 
-local GuiService = game:GetService("GuiService")
 local RunService = game:GetService("RunService")
 
-task.wait(3) -- Ждём загрузки GUI
+task.wait(3)
 
--- Поиск кнопки Auto Skip в твоём UI
-local function findAutoSkipToggle()
-    for _, obj in pairs(screenGui:GetDescendants()) do
-        if obj:IsA("TextLabel") and obj.Text == "Auto Skip" then
-            local parent = obj.Parent
-            if parent then
-                -- Ищем трек (Frame с кнопкой On/Off)
-                for _, child in pairs(parent:GetDescendants()) do
-                    if child:IsA("TextButton") and child.Name == "" then
-                        return child
+-- Ищем ТВОЮ кнопку Auto Skip в GUI
+local function findYourAutoSkipButton()
+    -- Ищем в scrollMain где у тебя toggle Auto Skip
+    for _, frame in pairs(scrollMain:GetChildren()) do
+        if frame:IsA("Frame") then
+            -- Проверяем есть ли TextLabel с текстом "Auto Skip"
+            local label = frame:FindFirstChild("TextLabel")
+            if label and label:IsA("TextLabel") and label.Text == "Auto Skip" then
+                -- Нашли фрейм с Auto Skip, теперь ищем hitbox (TextButton)
+                for _, child in pairs(frame:GetChildren()) do
+                    if child:IsA("TextButton") and child.Text == "" then
+                        return child, frame
                     end
                 end
             end
         end
     end
-    return nil
+    return nil, nil
 end
 
--- Функция клика через UI Navigation
-local function clickViaNavigation(button)
+-- Проверка включён ли toggle (смотрим на цвет knob)
+local function isToggleOn(toggleFrame)
+    if not toggleFrame then return false end
+    
+    local track = toggleFrame:FindFirstChild("Frame") -- track
+    if track then
+        local knob = track:FindFirstChild("Frame") -- knob
+        if knob then
+            -- Если knob справа (Position.X.Scale > 0.5) = ON
+            return knob.Position.X.Scale > 0.5 or knob.Position.X.Offset > 20
+        end
+    end
+    
+    return false
+end
+
+-- Функция клика
+local function clickButton(button)
     if not button or not button.Parent then return false end
-    if not button.Visible or not button.Active then return false end
     
     local success = false
     
-    -- Сохраняем текущий выбор
-    local prevSelected = GuiService.SelectedObject
-    
     pcall(function()
-        -- Выбираем кнопку
-        GuiService.SelectedObject = button
-        task.wait(0.05)
-        
-        -- Активируем все события
+        -- Метод 1: Activated
         for _, conn in pairs(getconnections(button.Activated)) do
             conn:Fire()
             success = true
         end
-        
-        for _, conn in pairs(getconnections(button.MouseButton1Click)) do
-            conn:Fire()
-            success = true
-        end
-        
-        task.wait(0.05)
-        
-        -- Возвращаем выбор
-        GuiService.SelectedObject = prevSelected
     end)
+    
+    if not success then
+        pcall(function()
+            -- Метод 2: MouseButton1Click
+            for _, conn in pairs(getconnections(button.MouseButton1Click)) do
+                conn:Fire()
+                success = true
+            end
+        end)
+    end
     
     return success
 end
 
 -- Таймер
 local lastCheck = 0
-local CHECK_INTERVAL = 1.5
+local CHECK_INTERVAL = 2.0
 
--- Основной цикл
-RunService.Heartbeat:Connect(function()
-    if not toggleStates then return end
-    if not toggleStates["Auto Skip"] then return end
+-- Главный цикл
+local autoSkipConnection
+autoSkipConnection = RunService.Heartbeat:Connect(function()
+    if not toggleStates then
+        autoSkipConnection:Disconnect()
+        return
+    end
     
-    local now = tick()
-    if now - lastCheck < CHECK_INTERVAL then return end
-    lastCheck = now
-    
-    -- Ищем кнопку
-    local skipToggle = findAutoSkipToggle()
-    
-    if skipToggle then
-        -- Проверяем состояние по позиции knob
-        local track = skipToggle.Parent
-        if track and track:IsA("Frame") then
-            local knob = track:FindFirstChildOfClass("Frame")
-            if knob then
-                -- Если knob слева (Position.X.Offset < 10) = OFF
-                if knob.Position.X.Offset < 10 then
-                    if clickViaNavigation(skipToggle) then
-                        if toggleStates["Notifications"] then
-                            warn("⏭️ [AUTO SKIP] Включён!")
-                        end
+    -- Работаем ТОЛЬКО если включён Auto Skip В НАШЕМ GUI
+    if toggleStates["Auto Skip"] then
+        local now = tick()
+        if now - lastCheck < CHECK_INTERVAL then return end
+        lastCheck = now
+        
+        -- Ищем кнопку
+        local skipButton, skipFrame = findYourAutoSkipButton()
+        
+        if skipButton and skipFrame then
+            -- Проверяем текущее состояние
+            local isOn = isToggleOn(skipFrame)
+            
+            -- Если выключен - включаем
+            if not isOn then
+                if clickButton(skipButton) then
+                    if toggleStates["Notifications"] then
+                        warn("⏭️ [AUTO SKIP] Clicked! (was OFF)")
                     end
                 end
+            end
+        else
+            if toggleStates["Notifications"] then
+                warn("⚠️ [AUTO SKIP] Button not found!")
             end
         end
     end
 end)
 
 print("========================================")
-print("✅ AUTO SKIP LOADED (UI NAVIGATION)")
+print("✅ AUTO SKIP READY")
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
