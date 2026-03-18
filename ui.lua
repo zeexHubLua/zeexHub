@@ -1575,6 +1575,131 @@ toggleSetters["AutoSave"](true, true)
 toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
+-- ==========================================
+-- AUTO FUNCTIONS (GARDEN TOWER DEFENSE)
+-- ==========================================
+
+local RunService = game:GetService("RunService")
+local player = game:GetService("Players").LocalPlayer
+
+-- Получаем кнопки
+local function getButton(path)
+    local success, result = pcall(function()
+        return player:WaitForChild("PlayerGui"):FindFirstChild(path, true)
+    end)
+    return success and result or nil
+end
+
+-- Ждём загрузки UI
+task.wait(2)
+
+local skipBtn, speedX2Btn, speedX3Btn
+
+-- Функция поиска кнопок
+local function findButtons()
+    local gui = player.PlayerGui
+    
+    -- Skip кнопка
+    for _, obj in pairs(gui:GetDescendants()) do
+        if obj:IsA("ImageButton") and obj.Name == "Skip" then
+            skipBtn = obj
+            break
+        end
+    end
+    
+    -- Speed кнопки
+    for _, obj in pairs(gui:GetDescendants()) do
+        if obj:IsA("ImageButton") and obj.Parent and obj.Parent.Name == "Items" then
+            if obj.Name == "2" then
+                speedX2Btn = obj
+            elseif obj.Name == "3" then
+                speedX3Btn = obj
+            end
+        end
+    end
+end
+
+-- Первичный поиск
+findButtons()
+
+-- Функция безопасного клика
+local function safeClick(button)
+    if button and button.Parent and button.Visible then
+        pcall(function()
+            for _, connection in pairs(getconnections(button.Activated)) do
+                connection:Fire()
+            end
+        end)
+        return true
+    end
+    return false
+end
+
+-- Основной цикл автоматизации
+local lastSkipTime = 0
+local lastSpeedCheck = 0
+local SKIP_COOLDOWN = 1 -- Задержка между попытками скипа (секунды)
+local SPEED_CHECK_INTERVAL = 0.5 -- Проверка скорости каждые 0.5 сек
+
+RunService.Heartbeat:Connect(function()
+    local now = tick()
+    
+    -- AUTO SKIP
+    if toggleStates["Auto Skip"] then
+        if now - lastSkipTime >= SKIP_COOLDOWN then
+            if not skipBtn or not skipBtn.Parent then
+                findButtons()
+            end
+            
+            if safeClick(skipBtn) then
+                lastSkipTime = now
+                if toggleStates["Notifications"] then
+                    print("⏭️ Auto Skip activated")
+                end
+            end
+        end
+    end
+    
+    -- AUTO SPEED
+    if now - lastSpeedCheck >= SPEED_CHECK_INTERVAL then
+        lastSpeedCheck = now
+        
+        -- Проверяем наличие кнопок
+        if (toggleStates["Auto x2 Speed"] or toggleStates["Auto x3 Speed"]) then
+            if not speedX2Btn or not speedX2Btn.Parent then
+                findButtons()
+            end
+        end
+        
+        -- AUTO X3 SPEED (приоритет выше)
+        if toggleStates["Auto x3 Speed"] then
+            if safeClick(speedX3Btn) then
+                if toggleStates["Notifications"] then
+                    print("⚡ Speed x3 activated")
+                end
+            end
+        -- AUTO X2 SPEED
+        elseif toggleStates["Auto x2 Speed"] then
+            if safeClick(speedX2Btn) then
+                if toggleStates["Notifications"] then
+                    print("⚡ Speed x2 activated")
+                end
+            end
+        end
+    end
+end)
+
+-- Переподключение при респавне
+player.CharacterAdded:Connect(function()
+    task.wait(2)
+    findButtons()
+end)
+
+print("✅ Auto Functions loaded!")
+print("   • Auto Skip:", toggleStates["Auto Skip"] and "ON" or "OFF")
+print("   • Auto x2 Speed:", toggleStates["Auto x2 Speed"] and "ON" or "OFF")
+print("   • Auto x3 Speed:", toggleStates["Auto x3 Speed"] and "ON" or "OFF")
+
 print("========================================")
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
 print("⚡ by zeenixxs")
