@@ -1,1135 +1,1094 @@
 -- ==========================================
--- ZEEXHUB UI - ПК + МОБИЛЬНАЯ ВЕРСИЯ (ИСПРАВЛЕНО)
+-- ZEEXHUB UI - ФИНАЛЬНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ
 -- ==========================================
 
-local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
+local Players          = game:GetService("Players")
+local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
+local RunService       = game:GetService("RunService")
+local HttpService      = game:GetService("HttpService")
 
-local player = Players.LocalPlayer
-local mouse = player:GetMouse()
-
--- ОПРЕДЕЛЯЕМ УСТРОЙСТВО
+local player   = Players.LocalPlayer
 local isMobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+
+-- ==========================================
+-- КОНСТАНТЫ РАЗМЕРОВ
+-- ==========================================
+local W          = isMobile and 380  or 500
+local H          = isMobile and 440  or 310
+local TITLE_H    = isMobile and 48   or 34
+local FOOTER_H   = 16
+local BTN_SZ     = isMobile and 40   or 24
+local LEFT_W     = isMobile and 90   or 82
+local CONTENT_X  = LEFT_W + 8
+local CONTENT_Y  = TITLE_H + 4
+local CONTENT_H  = H - CONTENT_Y - FOOTER_H - 6
+local CONTENT_W  = W - CONTENT_X - 6
 
 -- ==========================================
 -- ЦВЕТА
 -- ==========================================
-local colors = {
-    mainBg    = Color3.fromRGB(15, 0, 25),
-    panelBg   = Color3.fromRGB(25, 0, 40),
-    button    = Color3.fromRGB(80, 0, 130),
-    buttonAlt = Color3.fromRGB(120, 0, 180),
-    text      = Color3.fromRGB(255, 255, 255),
-    accent    = Color3.fromRGB(160, 0, 255),
-    toggleOn  = Color3.fromRGB(0, 255, 100),
-    toggleOff = Color3.fromRGB(100, 100, 100),
-    toggleBg  = Color3.fromRGB(40, 40, 40)
+local C = {
+    bg       = Color3.fromRGB(15,  0,  25),
+    panel    = Color3.fromRGB(25,  0,  40),
+    btn      = Color3.fromRGB(80,  0, 130),
+    btnHover = Color3.fromRGB(120, 0, 180),
+    accent   = Color3.fromRGB(160, 0, 255),
+    on       = Color3.fromRGB(0,  220,  85),
+    off      = Color3.fromRGB(100,100, 100),
+    track    = Color3.fromRGB(40,  40,  40),
+    trackOn  = Color3.fromRGB(0,  130,  40),
+    white    = Color3.fromRGB(255,255, 255),
+    danger   = Color3.fromRGB(150, 0, 100),
+    dim      = Color3.fromRGB(160,160, 160),
 }
 
 -- ==========================================
--- СИСТЕМА СОХРАНЕНИЯ МАКРОСОВ
+-- СОСТОЯНИЯ
 -- ==========================================
+local toggleStates  = {}   -- [key] = bool
+local toggleSetters = {}   -- [key] = function(bool, silent?)
+local configs       = {}
 local macros        = {}
-local selectedMacro = nil
-local isRecording   = false
-local isPlaying     = false
-local loopMode      = false
-local useHotkey     = false
-local selectedWave  = "Easy"
+local selectedConfig = nil
+local selectedMacro  = nil
+local selectedWave   = "Easy"
+local isPlaying      = false
+local isRecording    = false
+local loopMode       = false
+local useHotkey      = false
+
+-- ==========================================
+-- ФАЙЛЫ
+-- ==========================================
+local function tryRead(file)
+    if not (isfile and readfile) then return nil end
+    local ok, data = pcall(function()
+        if isfile(file) then return readfile(file) end
+    end)
+    return ok and data or nil
+end
+
+local function tryWrite(file, data)
+    if not (writefile) then return end
+    pcall(writefile, file, data)
+end
 
 local function saveMacros()
-    if not (writefile and type(writefile) == "function") then
-        print("⚠️ writefile недоступна")
-        return
+    if #macros > 0 then
+        tryWrite("zeexhub_macros.json", HttpService:JSONEncode(macros))
     end
-    local ok, err = pcall(function()
-        if macros and #macros > 0 then
-            local data = game:GetService("HttpService"):JSONEncode(macros)
-            if data then writefile("zeexhub_macros.json", data) end
-        end
-    end)
-    if not ok then warn("❌ Ошибка сохранения:", err) end
 end
 
 local function loadMacros()
-    if not (readfile and isfile and type(readfile) == "function" and type(isfile) == "function") then return end
-    local ok, err = pcall(function()
-        if isfile("zeexhub_macros.json") then
-            local data = readfile("zeexhub_macros.json")
-            if data and #data > 0 then
-                local decoded = game:GetService("HttpService"):JSONDecode(data)
-                if decoded and type(decoded) == "table" then
-                    macros = decoded
-                end
-            end
-        end
-    end)
-    if not ok then warn("❌ Ошибка загрузки:", err) end
+    local d = tryRead("zeexhub_macros.json")
+    if d and #d > 2 then
+        local ok, t = pcall(HttpService.JSONDecode, HttpService, d)
+        if ok and type(t) == "table" then macros = t end
+    end
+end
+
+local function saveConfigs()
+    tryWrite("zeexhub_configs.json", HttpService:JSONEncode(configs))
+end
+
+local function loadConfigs()
+    local d = tryRead("zeexhub_configs.json")
+    if d and #d > 2 then
+        local ok, t = pcall(HttpService.JSONDecode, HttpService, d)
+        if ok and type(t) == "table" then configs = t end
+    end
 end
 
 -- ==========================================
--- ГЛАВНЫЙ GUI
+-- HELPERS
+-- ==========================================
+local function addCorner(parent, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius or 8)
+    c.Parent = parent
+    return c
+end
+
+local function addStroke(parent, color, thickness, transparency)
+    local s = Instance.new("UIStroke")
+    s.Parent       = parent
+    s.Color        = color or C.accent
+    s.Thickness    = thickness or 2
+    s.Transparency = transparency or 0
+    return s
+end
+
+-- ==========================================
+-- SCREEN GUI
 -- ==========================================
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name            = "ZeexHub"
-screenGui.Parent          = player:WaitForChild("PlayerGui")
-screenGui.ResetOnSpawn    = false
-screenGui.IgnoreGuiInset  = true
-screenGui.DisplayOrder    = 999
--- [ИСПРАВЛЕНО] Sibling — ZIndex работает внутри каждой ветки отдельно
-screenGui.ZIndexBehavior  = Enum.ZIndexBehavior.Sibling
+screenGui.Name           = "ZeexHub"
+screenGui.Parent         = player:WaitForChild("PlayerGui")
+screenGui.ResetOnSpawn   = false
+screenGui.IgnoreGuiInset = true
+screenGui.DisplayOrder   = 999
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- ОСНОВНОЕ ОКНО
+-- ==========================================
+-- MAIN FRAME — ФИКСИРОВАННЫЙ ПРЯМОУГОЛЬНИК
+-- ==========================================
 local mainFrame = Instance.new("Frame")
 mainFrame.Parent               = screenGui
-mainFrame.BackgroundColor3     = colors.mainBg
-mainFrame.BackgroundTransparency = 0.3
-mainFrame.ClipsDescendants     = true
+mainFrame.BackgroundColor3     = C.bg
+mainFrame.BackgroundTransparency = 0.05
+mainFrame.Size                 = UDim2.new(0, W, 0, H)
+mainFrame.Position             = UDim2.new(0.5, -W/2, 0.5, -H/2)
 mainFrame.Active               = true
+mainFrame.ClipsDescendants     = true
+addCorner(mainFrame, 14)
 
--- [ИСПРАВЛЕНО] Мобильный: компактный размер вместо на весь экран
-if isMobile then
-    mainFrame.Size     = UDim2.new(0, 340, 0, 500)
-    mainFrame.Position = UDim2.new(0.5, -170, 0.5, -250)
-else
-    mainFrame.Size     = UDim2.new(0, 450, 0, 300)
-    mainFrame.Position = UDim2.new(0.5, -225, 0.5, -150)
-end
-
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 15)
-corner.Parent = mainFrame
-
--- RGB ОБВОДКА
-local stroke = Instance.new("UIStroke")
-stroke.Parent    = mainFrame
-stroke.Thickness = 3
-stroke.Color     = Color3.fromRGB(255, 0, 0)
-
+local rgbStroke = addStroke(mainFrame, C.accent, 3)
 local hue = 0
 RunService.RenderStepped:Connect(function()
     hue = (hue + 0.005) % 1
-    stroke.Color = Color3.fromHSV(hue, 1, 1)
+    rgbStroke.Color = Color3.fromHSV(hue, 1, 1)
 end)
 
 -- ==========================================
--- ВЕРХНЯЯ ПОЛОСКА
+-- TITLE BAR
 -- ==========================================
-local titleBarH = isMobile and 55 or 35
-
 local titleBar = Instance.new("Frame")
 titleBar.Parent               = mainFrame
-titleBar.BackgroundColor3     = colors.panelBg
-titleBar.BackgroundTransparency = 0.2
-titleBar.Size                 = UDim2.new(1, 0, 0, titleBarH)
+titleBar.BackgroundColor3     = C.panel
+titleBar.BackgroundTransparency = 0.1
+titleBar.Size                 = UDim2.new(1, 0, 0, TITLE_H)
+titleBar.ZIndex               = 2
 titleBar.Active               = true
+addCorner(titleBar, 14)
 
-local titleCorner = Instance.new("UICorner")
-titleCorner.CornerRadius = UDim.new(0, 15)
-titleCorner.Parent = titleBar
+local titleLbl = Instance.new("TextLabel")
+titleLbl.Parent             = titleBar
+titleLbl.Size               = UDim2.new(0, 180, 1, 0)
+titleLbl.Position           = UDim2.new(0, 10, 0, 0)
+titleLbl.BackgroundTransparency = 1
+titleLbl.Text               = "⚡ ZEEXHUB"
+titleLbl.TextColor3         = C.white
+titleLbl.Font               = Enum.Font.GothamBold
+titleLbl.TextSize           = isMobile and 14 or 15
+titleLbl.TextXAlignment     = Enum.TextXAlignment.Left
+titleLbl.ZIndex             = 3
 
-local titleText = Instance.new("TextLabel")
-titleText.Parent              = titleBar
-titleText.Size                = UDim2.new(0, 150, 1, 0)
-titleText.Position            = UDim2.new(0, 10, 0, 0)
-titleText.BackgroundTransparency = 1
-titleText.Text                = "⚡ ZEEXHUB"
-titleText.TextColor3          = Color3.fromRGB(255, 255, 255)
-titleText.TextXAlignment      = Enum.TextXAlignment.Left
-titleText.Font                = Enum.Font.GothamBold
-titleText.TextSize            = isMobile and 14 or 16
+local authorLbl = Instance.new("TextLabel")
+authorLbl.Parent             = titleBar
+authorLbl.Size               = UDim2.new(0, 100, 1, 0)
+authorLbl.Position           = UDim2.new(1, -(BTN_SZ*2 + 18 + 100), 0, 0)
+authorLbl.BackgroundTransparency = 1
+authorLbl.Text               = "by: zeenixxs"
+authorLbl.TextColor3         = Color3.fromRGB(180, 180, 255)
+authorLbl.Font               = Enum.Font.GothamBold
+authorLbl.TextSize           = 10
+authorLbl.TextTransparency   = 0.3
+authorLbl.TextXAlignment     = Enum.TextXAlignment.Right
+authorLbl.ZIndex             = 3
 
-local authorText = Instance.new("TextLabel")
-authorText.Parent             = titleBar
-authorText.Size               = UDim2.new(0, 150, 1, 0)
-authorText.Position           = UDim2.new(1, -160, 0, 0)
-authorText.BackgroundTransparency = 1
-authorText.Text               = "by: zeenixxs"
-authorText.TextColor3         = Color3.fromRGB(180, 180, 255)
-authorText.TextXAlignment     = Enum.TextXAlignment.Right
-authorText.Font               = Enum.Font.GothamBold
-authorText.TextSize           = 11
-authorText.TextTransparency   = 0.3
+-- HIDE / CLOSE КНОПКИ (ZIndex = 10 — поверх всего в titleBar)
+local function makeTitleBtn(text, xOff, bg)
+    local b = Instance.new("TextButton")
+    b.Parent          = titleBar
+    b.Size            = UDim2.new(0, BTN_SZ, 0, BTN_SZ)
+    b.Position        = UDim2.new(1, xOff, 0.5, -BTN_SZ/2)
+    b.BackgroundColor3 = bg
+    b.Text            = text
+    b.TextColor3      = C.white
+    b.Font            = Enum.Font.GothamBold
+    b.TextSize        = isMobile and 20 or 15
+    b.ZIndex          = 10
+    addCorner(b, 6)
+    return b
+end
 
--- [ИСПРАВЛЕНО] ZIndex кнопок выше titleBar + используем Activated
-local btnSize = isMobile and 45 or 25
+local hideBtn  = makeTitleBtn("−", -(BTN_SZ*2 + 10), C.btn)
+local closeBtn = makeTitleBtn("✕", -(BTN_SZ   +  5), C.danger)
 
-local hideBtn = Instance.new("TextButton")
-hideBtn.Parent          = titleBar
-hideBtn.Size            = UDim2.new(0, btnSize, 0, btnSize)
-hideBtn.Position        = UDim2.new(1, isMobile and -100 or -62, 0.5, -btnSize/2)
-hideBtn.BackgroundColor3 = colors.button
-hideBtn.Text            = "−"
-hideBtn.TextColor3      = Color3.fromRGB(255, 255, 255)
-hideBtn.Font            = Enum.Font.GothamBold
-hideBtn.TextSize        = isMobile and 24 or 18
-hideBtn.ZIndex          = 10   -- [ИСПРАВЛЕНО]
+-- DRAGGING
+local drag = {on=false, input=nil, mpos=nil, fpos=nil}
 
-local hideCorner = Instance.new("UICorner")
-hideCorner.CornerRadius = UDim.new(0, 6)
-hideCorner.Parent = hideBtn
-
-local closeBtn = Instance.new("TextButton")
-closeBtn.Parent          = titleBar
-closeBtn.Size            = UDim2.new(0, btnSize, 0, btnSize)
-closeBtn.Position        = UDim2.new(1, isMobile and -50 or -32, 0.5, -btnSize/2)
-closeBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 100)
-closeBtn.Text            = "✕"
-closeBtn.TextColor3      = Color3.fromRGB(255, 255, 255)
-closeBtn.Font            = Enum.Font.GothamBold
-closeBtn.TextSize        = isMobile and 20 or 14
-closeBtn.ZIndex          = 10   -- [ИСПРАВЛЕНО]
-
-local closeCorner = Instance.new("UICorner")
-closeCorner.CornerRadius = UDim.new(0, 6)
-closeCorner.Parent = closeBtn
-
--- ==========================================
--- ПЕРЕТАСКИВАНИЕ
--- ==========================================
-local dragging  = false
-local dragInput = nil
-local mousePos  = nil
-local framePos  = nil
-
-titleBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-    or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        mousePos = input.Position
-        framePos = mainFrame.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
+titleBar.InputBegan:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.MouseButton1
+    or inp.UserInputType == Enum.UserInputType.Touch then
+        drag.on   = true
+        drag.mpos = inp.Position
+        drag.fpos = mainFrame.Position
+        inp.Changed:Connect(function()
+            if inp.UserInputState == Enum.UserInputState.End then drag.on = false end
         end)
     end
 end)
-
-titleBar.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement
-    or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
+titleBar.InputChanged:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.MouseMovement
+    or inp.UserInputType == Enum.UserInputType.Touch then
+        drag.input = inp
     end
 end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        local delta = input.Position - mousePos
+UserInputService.InputChanged:Connect(function(inp)
+    if inp == drag.input and drag.on then
+        local d = inp.Position - drag.mpos
         mainFrame.Position = UDim2.new(
-            framePos.X.Scale, framePos.X.Offset + delta.X,
-            framePos.Y.Scale, framePos.Y.Offset + delta.Y
+            drag.fpos.X.Scale, drag.fpos.X.Offset + d.X,
+            drag.fpos.Y.Scale, drag.fpos.Y.Offset + d.Y
         )
     end
 end)
 
--- ==========================================
--- КНОПКА ОТКРЫТИЯ (когда свёрнуто)
--- ==========================================
-local tabButton = Instance.new("TextButton")
-tabButton.Parent          = screenGui
-tabButton.Size            = UDim2.new(0, 40, 0, 40)
-tabButton.Position        = UDim2.new(1, -50, 0.5, -20)
-tabButton.BackgroundColor3 = colors.accent
-tabButton.Text            = "⚡"
-tabButton.TextColor3      = Color3.fromRGB(255, 255, 255)
-tabButton.Font            = Enum.Font.GothamBold
-tabButton.TextSize        = 20
-tabButton.Visible         = false
-tabButton.ZIndex          = 100
+-- TAB BUTTON (когда окно свёрнуто)
+local tabBtn = Instance.new("TextButton")
+tabBtn.Parent          = screenGui
+tabBtn.Size            = UDim2.new(0, 44, 0, 44)
+tabBtn.Position        = UDim2.new(1, -54, 0.5, -22)
+tabBtn.BackgroundColor3 = C.accent
+tabBtn.Text            = "⚡"
+tabBtn.TextColor3      = C.white
+tabBtn.Font            = Enum.Font.GothamBold
+tabBtn.TextSize        = 22
+tabBtn.Visible         = false
+tabBtn.ZIndex          = 100
+addCorner(tabBtn, 10)
 
-local tabCorner = Instance.new("UICorner")
-tabCorner.CornerRadius = UDim.new(0, 10)
-tabCorner.Parent = tabButton
-
--- ==========================================
--- [ИСПРАВЛЕНО] Все кнопки через Activated (ПК + мобильные)
--- ==========================================
 hideBtn.Activated:Connect(function()
-    mainFrame.Visible  = false
-    tabButton.Visible  = true
+    mainFrame.Visible = false
+    tabBtn.Visible    = true
 end)
-
-tabButton.Activated:Connect(function()
-    mainFrame.Visible  = true
-    tabButton.Visible  = false
+tabBtn.Activated:Connect(function()
+    mainFrame.Visible = true
+    tabBtn.Visible    = false
 end)
-
 closeBtn.Activated:Connect(function()
     screenGui:Destroy()
 end)
 
--- HOTKEY КНОПКА
-local hotkeyButton = Instance.new("TextButton")
-hotkeyButton.Parent          = screenGui
-hotkeyButton.Size            = UDim2.new(0, 50, 0, 50)
-hotkeyButton.Position        = UDim2.new(1, -70, 0, 50)
-hotkeyButton.BackgroundColor3 = colors.toggleOn
-hotkeyButton.Text            = "▶"
-hotkeyButton.TextColor3      = Color3.fromRGB(255, 255, 255)
-hotkeyButton.Font            = Enum.Font.GothamBold
-hotkeyButton.TextSize        = 24
-hotkeyButton.Visible         = false
-hotkeyButton.ZIndex          = 100
+-- HOTKEY FLOATING BUTTON
+local hotkeyBtn = Instance.new("TextButton")
+hotkeyBtn.Parent          = screenGui
+hotkeyBtn.Size            = UDim2.new(0, 48, 0, 48)
+hotkeyBtn.Position        = UDim2.new(1, -62, 0, 54)
+hotkeyBtn.BackgroundColor3 = C.on
+hotkeyBtn.Text            = "▶"
+hotkeyBtn.TextColor3      = C.white
+hotkeyBtn.Font            = Enum.Font.GothamBold
+hotkeyBtn.TextSize        = 22
+hotkeyBtn.Visible         = false
+hotkeyBtn.ZIndex          = 100
+addCorner(hotkeyBtn, 10)
 
-local hotkeyCorner = Instance.new("UICorner")
-hotkeyCorner.CornerRadius = UDim.new(0, 10)
-hotkeyCorner.Parent = hotkeyButton
-
-hotkeyButton.Activated:Connect(function()
+hotkeyBtn.Activated:Connect(function()
     isPlaying = not isPlaying
-    if isPlaying then
-        hotkeyButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-        hotkeyButton.Text = "⏸"
-    else
-        hotkeyButton.BackgroundColor3 = colors.toggleOn
-        hotkeyButton.Text = "▶"
-    end
+    hotkeyBtn.BackgroundColor3 = isPlaying and Color3.fromRGB(220,40,40) or C.on
+    hotkeyBtn.Text             = isPlaying and "⏸" or "▶"
 end)
 
 -- ==========================================
--- ЛЕВАЯ ПАНЕЛЬ
+-- LEFT PANEL
 -- ==========================================
-local leftPanelW = isMobile and 100 or 90
-local contentOffsetY = titleBarH + 5
-
 local leftPanel = Instance.new("Frame")
 leftPanel.Parent               = mainFrame
-leftPanel.Size                 = UDim2.new(0, leftPanelW, 1, -contentOffsetY - 18)
-leftPanel.Position             = UDim2.new(0, 5, 0, contentOffsetY)
-leftPanel.BackgroundColor3     = colors.panelBg
-leftPanel.BackgroundTransparency = 0.3
+leftPanel.Size                 = UDim2.new(0, LEFT_W, 0, CONTENT_H)
+leftPanel.Position             = UDim2.new(0, 4, 0, CONTENT_Y)
+leftPanel.BackgroundColor3     = C.panel
+leftPanel.BackgroundTransparency = 0.2
 leftPanel.ZIndex               = 2
+addCorner(leftPanel, 10)
+addStroke(leftPanel, C.accent, 2)
 
-local leftCorner = Instance.new("UICorner")
-leftCorner.CornerRadius = UDim.new(0, 10)
-leftCorner.Parent = leftPanel
-
-local leftStroke = Instance.new("UIStroke")
-leftStroke.Parent    = leftPanel
-leftStroke.Color     = colors.accent
-leftStroke.Thickness = 2
-
-local function createNavButton(text, yPos)
-    local btn = Instance.new("TextButton")
-    btn.Parent               = leftPanel
-    btn.Size                 = UDim2.new(1, -10, 0, 30)
-    btn.Position             = UDim2.new(0, 5, 0, yPos)
-    btn.BackgroundColor3     = colors.button
-    btn.BackgroundTransparency = 0.1
-    btn.Text                 = text
-    btn.TextColor3           = Color3.fromRGB(255, 255, 255)
-    btn.Font                 = Enum.Font.GothamBold
-    btn.TextSize             = isMobile and 10 or 12
-    btn.ZIndex               = 3
-
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, 6)
-    c.Parent = btn
-
-    btn.MouseEnter:Connect(function() btn.BackgroundColor3 = colors.buttonAlt end)
-    btn.MouseLeave:Connect(function() btn.BackgroundColor3 = colors.button end)
-
-    return btn
+local function navBtn(text, yPos)
+    local b = Instance.new("TextButton")
+    b.Parent          = leftPanel
+    b.Size            = UDim2.new(1, -8, 0, 26)
+    b.Position        = UDim2.new(0, 4, 0, yPos)
+    b.BackgroundColor3 = C.btn
+    b.Text            = text
+    b.TextColor3      = C.white
+    b.Font            = Enum.Font.GothamBold
+    b.TextSize        = isMobile and 9 or 11
+    b.ZIndex          = 3
+    addCorner(b, 6)
+    b.MouseEnter:Connect(function() b.BackgroundColor3 = C.btnHover end)
+    b.MouseLeave:Connect(function() b.BackgroundColor3 = C.btn      end)
+    return b
 end
 
-local mainBtn     = createNavButton("MAIN",  10)
-local macroBtn    = createNavButton("MACRO", 45)
-local settingsBtn = createNavButton("SET",   80)
+local navMain     = navBtn("MAIN",  8)
+local navMacro    = navBtn("MACRO", 38)
+local navSettings = navBtn("SET",   68)
 
 -- ==========================================
--- РАБОЧАЯ ОБЛАСТЬ
+-- CONTENT AREA
 -- ==========================================
 local contentArea = Instance.new("Frame")
 contentArea.Parent               = mainFrame
-contentArea.Size                 = UDim2.new(1, -(leftPanelW + 15), 1, -contentOffsetY - 18)
-contentArea.Position             = UDim2.new(0, leftPanelW + 10, 0, contentOffsetY)
-contentArea.BackgroundColor3     = colors.panelBg
-contentArea.BackgroundTransparency = 0.4
+contentArea.Size                 = UDim2.new(0, CONTENT_W, 0, CONTENT_H)
+contentArea.Position             = UDim2.new(0, CONTENT_X, 0, CONTENT_Y)
+contentArea.BackgroundColor3     = C.panel
+contentArea.BackgroundTransparency = 0.25
 contentArea.ClipsDescendants     = true
 contentArea.ZIndex               = 2
+addCorner(contentArea, 10)
+addStroke(contentArea, C.accent, 2)
 
-local contentCorner = Instance.new("UICorner")
-contentCorner.CornerRadius = UDim.new(0, 10)
-contentCorner.Parent = contentArea
-
-local contentStroke = Instance.new("UIStroke")
-contentStroke.Parent    = contentArea
-contentStroke.Color     = colors.accent
-contentStroke.Thickness = 2
-
--- ==========================================
--- КОНТЕЙНЕРЫ
--- ==========================================
-local function makeScroll(visible)
+local function makeScroll(visible, canvasH)
     local sf = Instance.new("ScrollingFrame")
     sf.Parent               = contentArea
-    sf.Size                 = UDim2.new(1, -5, 1, -5)
+    sf.Size                 = UDim2.new(1, -4, 1, -4)
     sf.Position             = UDim2.new(0, 2, 0, 2)
     sf.BackgroundTransparency = 1
     sf.Visible              = visible
     sf.ZIndex               = 3
-    sf.ScrollBarThickness   = 4
-    sf.ScrollBarImageColor3 = colors.accent
+    sf.ScrollBarThickness   = 3
+    sf.ScrollBarImageColor3 = C.accent
     sf.BorderSizePixel      = 0
-    sf.CanvasSize           = UDim2.new(0, 0, 0, 600)
+    sf.CanvasSize           = UDim2.new(0, 0, 0, canvasH or 500)
     return sf
 end
 
-local mainContainer     = makeScroll(true)
-local macroContainer    = makeScroll(false)
-local settingsContainer = makeScroll(false)
-settingsContainer.CanvasSize = UDim2.new(0, 0, 0, 300)
+local scrollMain     = makeScroll(true,  480)
+local scrollMacro    = makeScroll(false, 480)
+local scrollSettings = makeScroll(false, 320)
 
 -- ==========================================
--- MAIN ВКЛАДКА
+-- TOGGLE FACTORY
+-- key        = строка для toggleStates / toggleSetters
+-- label      = текст который видит пользователь
 -- ==========================================
-local mainTitle = Instance.new("TextLabel")
-mainTitle.Parent             = mainContainer
-mainTitle.Size               = UDim2.new(1, -10, 0, 25)
-mainTitle.Position           = UDim2.new(0, 5, 0, 0)
-mainTitle.BackgroundTransparency = 1
-mainTitle.Text               = "⚡ MAIN"
-mainTitle.TextColor3         = Color3.fromRGB(255, 255, 255)
-mainTitle.Font               = Enum.Font.GothamBold
-mainTitle.TextSize           = 16
-mainTitle.ZIndex             = 4
-
--- ФУНКЦИЯ СОЗДАНИЯ TOGGLE
-local function createToggle(text, yPos, parent)
-    local toggleFrame = Instance.new("Frame")
-    toggleFrame.Parent               = parent
-    toggleFrame.Size                 = UDim2.new(1, -20, 0, 40)
-    toggleFrame.Position             = UDim2.new(0, 10, 0, yPos)
-    toggleFrame.BackgroundColor3     = colors.panelBg
-    toggleFrame.BackgroundTransparency = 0.5
-    toggleFrame.ZIndex               = 4
-
-    local tc = Instance.new("UICorner")
-    tc.CornerRadius = UDim.new(0, 8)
-    tc.Parent = toggleFrame
-
-    local ts = Instance.new("UIStroke")
-    ts.Parent       = toggleFrame
-    ts.Color        = colors.accent
-    ts.Thickness    = 1
-    ts.Transparency = 0.5
-
-    local label = Instance.new("TextLabel")
-    label.Parent             = toggleFrame
-    label.Size               = UDim2.new(1, -80, 1, 0)
-    label.Position           = UDim2.new(0, 10, 0, 0)
-    label.BackgroundTransparency = 1
-    label.Text               = text
-    label.TextColor3         = Color3.fromRGB(255, 255, 255)
-    label.Font               = Enum.Font.GothamBold
-    label.TextSize           = 13
-    label.TextXAlignment     = Enum.TextXAlignment.Left
-    label.ZIndex             = 5
-
-    local track = Instance.new("Frame")
-    track.Parent          = toggleFrame
-    track.Size            = UDim2.new(0, 45, 0, 22)
-    track.Position        = UDim2.new(1, -55, 0.5, -11)
-    track.BackgroundColor3 = colors.toggleBg
-    track.ZIndex          = 5
-
-    local trc = Instance.new("UICorner")
-    trc.CornerRadius = UDim.new(1, 0)
-    trc.Parent = track
-
-    local knob = Instance.new("Frame")
-    knob.Parent          = track
-    knob.Size            = UDim2.new(0, 18, 0, 18)
-    knob.Position        = UDim2.new(0, 2, 0.5, -9)
-    knob.BackgroundColor3 = colors.toggleOff
-    knob.ZIndex          = 6
-
-    local kc = Instance.new("UICorner")
-    kc.CornerRadius = UDim.new(1, 0)
-    kc.Parent = knob
-
-    local isEnabled = false
-
-    -- [ИСПРАВЛЕНО] Прозрачная кнопка поверх всего
-    local hitbox = Instance.new("TextButton")
-    hitbox.Parent             = toggleFrame
-    hitbox.Size               = UDim2.new(1, 0, 1, 0)
-    hitbox.BackgroundTransparency = 1
-    hitbox.Text               = ""
-    hitbox.ZIndex             = 7
-
-    local function toggle()
-        isEnabled = not isEnabled
-        local onPos  = UDim2.new(1, -20, 0.5, -9)
-        local offPos = UDim2.new(0, 2, 0.5, -9)
-        if isEnabled then
-            TweenService:Create(knob, TweenInfo.new(0.3, Enum.EasingStyle.Quad),
-                {Position = onPos, BackgroundColor3 = colors.toggleOn}):Play()
-            TweenService:Create(track, TweenInfo.new(0.3),
-                {BackgroundColor3 = Color3.fromRGB(0, 150, 50)}):Play()
-            TweenService:Create(ts, TweenInfo.new(0.2),
-                {Transparency = 0, Color = colors.toggleOn}):Play()
-        else
-            TweenService:Create(knob, TweenInfo.new(0.3, Enum.EasingStyle.Quad),
-                {Position = offPos, BackgroundColor3 = colors.toggleOff}):Play()
-            TweenService:Create(track, TweenInfo.new(0.3),
-                {BackgroundColor3 = colors.toggleBg}):Play()
-            TweenService:Create(ts, TweenInfo.new(0.2),
-                {Transparency = 0.5, Color = colors.accent}):Play()
-        end
-        print(text .. ":", isEnabled and "ВКЛ ✅" or "ВЫКЛ ⭕")
-    end
-
-    -- [ИСПРАВЛЕНО] Только Activated
-    hitbox.Activated:Connect(toggle)
-
-    hitbox.MouseEnter:Connect(function()
-        TweenService:Create(toggleFrame, TweenInfo.new(0.2), {BackgroundTransparency = 0.3}):Play()
-    end)
-    hitbox.MouseLeave:Connect(function()
-        TweenService:Create(toggleFrame, TweenInfo.new(0.2), {BackgroundTransparency = 0.5}):Play()
-    end)
-
-    return toggleFrame, hitbox
-end
-
-createToggle("Auto Skip",       35,  mainContainer)
-createToggle("Auto x2 Speed",   85,  mainContainer)
-createToggle("Auto x3 Speed",   135, mainContainer)
-createToggle("Auto Play Again", 185, mainContainer)
-
--- AUTO MODE + ВЫБОР ВОЛНЫ
-local autoModeFrame = Instance.new("Frame")
-autoModeFrame.Parent               = mainContainer
-autoModeFrame.Size                 = UDim2.new(1, -20, 0, 40)
-autoModeFrame.Position             = UDim2.new(0, 10, 0, 235)
-autoModeFrame.BackgroundColor3     = colors.panelBg
-autoModeFrame.BackgroundTransparency = 0.5
-autoModeFrame.ZIndex               = 4
-
-local amc = Instance.new("UICorner")
-amc.CornerRadius = UDim.new(0, 8)
-amc.Parent = autoModeFrame
-
-local autoModeLabel = Instance.new("TextLabel")
-autoModeLabel.Parent             = autoModeFrame
-autoModeLabel.Size               = UDim2.new(0, 100, 1, 0)
-autoModeLabel.Position           = UDim2.new(0, 10, 0, 0)
-autoModeLabel.BackgroundTransparency = 1
-autoModeLabel.Text               = "Auto Mode"
-autoModeLabel.TextColor3         = Color3.fromRGB(255, 255, 255)
-autoModeLabel.Font               = Enum.Font.GothamBold
-autoModeLabel.TextSize           = 13
-autoModeLabel.TextXAlignment     = Enum.TextXAlignment.Left
-autoModeLabel.ZIndex             = 5
-
-local waveSelector = Instance.new("Frame")
-waveSelector.Parent          = autoModeFrame
-waveSelector.Size            = UDim2.new(0, 150, 0, 30)
-waveSelector.Position        = UDim2.new(1, -160, 0.5, -15)
-waveSelector.BackgroundColor3 = colors.toggleBg
-waveSelector.BackgroundTransparency = 0.3
-waveSelector.ZIndex          = 5
-
-local wsc = Instance.new("UICorner")
-wsc.CornerRadius = UDim.new(0, 6)
-wsc.Parent = waveSelector
-
-local waveLabel = Instance.new("TextLabel")
-waveLabel.Parent             = waveSelector
-waveLabel.Size               = UDim2.new(1, -30, 1, 0)
-waveLabel.Position           = UDim2.new(0, 10, 0, 0)
-waveLabel.BackgroundTransparency = 1
-waveLabel.Text               = "Easy"
-waveLabel.TextColor3         = Color3.fromRGB(200, 200, 200)
-waveLabel.Font               = Enum.Font.Gotham
-waveLabel.TextSize           = 12
-waveLabel.TextXAlignment     = Enum.TextXAlignment.Left
-waveLabel.ZIndex             = 6
-
-local waveArrow = Instance.new("TextLabel")
-waveArrow.Parent             = waveSelector
-waveArrow.Size               = UDim2.new(0, 20, 1, 0)
-waveArrow.Position           = UDim2.new(1, -25, 0, 0)
-waveArrow.BackgroundTransparency = 1
-waveArrow.Text               = "▼"
-waveArrow.TextColor3         = Color3.fromRGB(180, 180, 180)
-waveArrow.Font               = Enum.Font.GothamBold
-waveArrow.TextSize           = 10
-waveArrow.ZIndex             = 6
-
--- ВЫПАДАЮЩИЙ СПИСОК ВОЛН
-local waveDropdown = Instance.new("ScrollingFrame")
-waveDropdown.Parent          = mainContainer
-waveDropdown.Size            = UDim2.new(0, 150, 0, 200)
-waveDropdown.Position        = UDim2.new(1, -165, 0, 300)
-waveDropdown.BackgroundColor3 = colors.mainBg
-waveDropdown.BackgroundTransparency = 0.1
-waveDropdown.Visible         = false
-waveDropdown.ZIndex          = 20
-waveDropdown.ScrollBarThickness = 3
-waveDropdown.ScrollBarImageColor3 = colors.accent
-waveDropdown.CanvasSize      = UDim2.new(0, 0, 0, 240)
-waveDropdown.BorderSizePixel = 0
-
-local wdc = Instance.new("UICorner")
-wdc.CornerRadius = UDim.new(0, 8)
-wdc.Parent = waveDropdown
-
-local wds = Instance.new("UIStroke")
-wds.Parent    = waveDropdown
-wds.Color     = colors.accent
-wds.Thickness = 2
-
-local waves = {"Easy","Normal","Hard","Insane","Impossible","Apocalypse"}
-
-for i, wave in ipairs(waves) do
-    local item = Instance.new("Frame")
-    item.Parent          = waveDropdown
-    item.Size            = UDim2.new(1, -10, 0, 35)
-    item.Position        = UDim2.new(0, 5, 0, (i-1)*40 + 5)
-    item.BackgroundColor3 = colors.panelBg
-    item.BackgroundTransparency = 0.5
-    item.ZIndex          = 21
-
-    local ic = Instance.new("UICorner")
-    ic.CornerRadius = UDim.new(0, 6)
-    ic.Parent = item
-
-    local il = Instance.new("TextLabel")
-    il.Parent             = item
-    il.Size               = UDim2.new(1, -10, 1, 0)
-    il.Position           = UDim2.new(0, 10, 0, 0)
-    il.BackgroundTransparency = 1
-    il.Text               = wave
-    il.TextColor3         = Color3.fromRGB(255, 255, 255)
-    il.Font               = Enum.Font.GothamBold
-    il.TextSize           = 12
-    il.TextXAlignment     = Enum.TextXAlignment.Left
-    il.ZIndex             = 22
-
-    local ib = Instance.new("TextButton")
-    ib.Parent             = item
-    ib.Size               = UDim2.new(1, 0, 1, 0)
-    ib.BackgroundTransparency = 1
-    ib.Text               = ""
-    ib.ZIndex             = 23
-
-    ib.Activated:Connect(function()      -- [ИСПРАВЛЕНО]
-        selectedWave = wave
-        waveLabel.Text      = wave
-        waveLabel.TextColor3 = colors.toggleOn
-        waveDropdown.Visible = false
-    end)
-    ib.MouseEnter:Connect(function() item.BackgroundTransparency = 0.3 end)
-    ib.MouseLeave:Connect(function() item.BackgroundTransparency = 0.5 end)
-end
-
-local waveSelectorBtn = Instance.new("TextButton")
-waveSelectorBtn.Parent             = waveSelector
-waveSelectorBtn.Size               = UDim2.new(1, 0, 1, 0)
-waveSelectorBtn.BackgroundTransparency = 1
-waveSelectorBtn.Text               = ""
-waveSelectorBtn.ZIndex             = 7
-
-waveSelectorBtn.Activated:Connect(function()    -- [ИСПРАВЛЕНО]
-    waveDropdown.Visible = not waveDropdown.Visible
-end)
-waveSelectorBtn.MouseEnter:Connect(function() waveSelector.BackgroundTransparency = 0.1 end)
-waveSelectorBtn.MouseLeave:Connect(function() waveSelector.BackgroundTransparency = 0.3 end)
-
--- ==========================================
--- MACRO ВКЛАДКА
--- ==========================================
-local macroTitle = Instance.new("TextLabel")
-macroTitle.Parent             = macroContainer
-macroTitle.Size               = UDim2.new(1, -10, 0, 25)
-macroTitle.Position           = UDim2.new(0, 5, 0, 0)
-macroTitle.BackgroundTransparency = 1
-macroTitle.Text               = "⚡ MACRO"
-macroTitle.TextColor3         = Color3.fromRGB(255, 255, 255)
-macroTitle.Font               = Enum.Font.GothamBold
-macroTitle.TextSize           = 16
-macroTitle.ZIndex             = 4
-
-local macroLeftSection = Instance.new("Frame")
-macroLeftSection.Parent           = macroContainer
-macroLeftSection.Size             = UDim2.new(1, -10, 1, -35)
-macroLeftSection.Position         = UDim2.new(0, 5, 0, 30)
-macroLeftSection.BackgroundTransparency = 1
-macroLeftSection.ZIndex           = 4
-
--- ОКНО СОЗДАНИЯ МАКРОСА
-local createWindow = Instance.new("Frame")
-createWindow.Parent          = screenGui
-createWindow.Size            = UDim2.new(0, 300, 0, 150)
-createWindow.Position        = UDim2.new(0.5, -150, 0.5, -75)
-createWindow.BackgroundColor3 = colors.mainBg
-createWindow.BackgroundTransparency = 0.1
-createWindow.Visible         = false
-createWindow.ZIndex          = 50
-
-local cwc = Instance.new("UICorner")
-cwc.CornerRadius = UDim.new(0, 12)
-cwc.Parent = createWindow
-
-local cws = Instance.new("UIStroke")
-cws.Parent    = createWindow
-cws.Color     = colors.accent
-cws.Thickness = 3
-
-local createTitle = Instance.new("TextLabel")
-createTitle.Parent             = createWindow
-createTitle.Size               = UDim2.new(1, -20, 0, 30)
-createTitle.Position           = UDim2.new(0, 10, 0, 10)
-createTitle.BackgroundTransparency = 1
-createTitle.Text               = "📁 CREATE MACRO"
-createTitle.TextColor3         = Color3.fromRGB(255, 255, 255)
-createTitle.Font               = Enum.Font.GothamBold
-createTitle.TextSize           = 16
-createTitle.ZIndex             = 51
-
-local macroNameBox = Instance.new("TextBox")
-macroNameBox.Parent           = createWindow
-macroNameBox.Size             = UDim2.new(1, -40, 0, 35)
-macroNameBox.Position         = UDim2.new(0, 20, 0, 50)
-macroNameBox.BackgroundColor3 = colors.panelBg
-macroNameBox.BackgroundTransparency = 0.3
-macroNameBox.Text             = ""
-macroNameBox.PlaceholderText  = "Введите название..."
-macroNameBox.TextColor3       = Color3.fromRGB(255, 255, 255)
-macroNameBox.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
-macroNameBox.Font             = Enum.Font.Gotham
-macroNameBox.TextSize         = 14
-macroNameBox.ZIndex           = 51
-
-local mnbc = Instance.new("UICorner")
-mnbc.CornerRadius = UDim.new(0, 8)
-mnbc.Parent = macroNameBox
-
-local createConfirmBtn = Instance.new("TextButton")
-createConfirmBtn.Parent          = createWindow
-createConfirmBtn.Size            = UDim2.new(0, 120, 0, 35)
-createConfirmBtn.Position        = UDim2.new(0.5, -125, 1, -45)
-createConfirmBtn.BackgroundColor3 = colors.toggleOn
-createConfirmBtn.Text            = "✓ CREATE"
-createConfirmBtn.TextColor3      = Color3.fromRGB(255, 255, 255)
-createConfirmBtn.Font            = Enum.Font.GothamBold
-createConfirmBtn.TextSize        = 14
-createConfirmBtn.ZIndex          = 51
-
-local ccbc = Instance.new("UICorner")
-ccbc.CornerRadius = UDim.new(0, 8)
-ccbc.Parent = createConfirmBtn
-
-local createCancelBtn = Instance.new("TextButton")
-createCancelBtn.Parent          = createWindow
-createCancelBtn.Size            = UDim2.new(0, 120, 0, 35)
-createCancelBtn.Position        = UDim2.new(0.5, 5, 1, -45)
-createCancelBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 100)
-createCancelBtn.Text            = "✕ CANCEL"
-createCancelBtn.TextColor3      = Color3.fromRGB(255, 255, 255)
-createCancelBtn.Font            = Enum.Font.GothamBold
-createCancelBtn.TextSize        = 14
-createCancelBtn.ZIndex          = 51
-
-local cxbc = Instance.new("UICorner")
-cxbc.CornerRadius = UDim.new(0, 8)
-cxbc.Parent = createCancelBtn
-
--- ВЫПАДАЮЩИЙ СПИСОК МАКРОСОВ
-local macroDropdown = Instance.new("ScrollingFrame")
-macroDropdown.Parent          = macroLeftSection
-macroDropdown.Size            = UDim2.new(0, 200, 0, 150)
-macroDropdown.Position        = UDim2.new(0, 125, 0, 100)
-macroDropdown.BackgroundColor3 = colors.mainBg
-macroDropdown.BackgroundTransparency = 0.1
-macroDropdown.Visible         = false
-macroDropdown.ZIndex          = 20
-macroDropdown.ScrollBarThickness = 3
-macroDropdown.ScrollBarImageColor3 = colors.accent
-macroDropdown.CanvasSize      = UDim2.new(0, 0, 0, 0)
-macroDropdown.BorderSizePixel = 0
-
-local mdc = Instance.new("UICorner")
-mdc.CornerRadius = UDim.new(0, 8)
-mdc.Parent = macroDropdown
-
-local mds = Instance.new("UIStroke")
-mds.Parent    = macroDropdown
-mds.Color     = colors.accent
-mds.Thickness = 2
-
--- ОБНОВЛЕНИЕ СПИСКА МАКРОСОВ
-local function updateMacroDropdown()
-    for _, child in pairs(macroDropdown:GetChildren()) do
-        if child:IsA("Frame") then child:Destroy() end
-    end
-
-    for i, macro in ipairs(macros) do
-        local item = Instance.new("Frame")
-        item.Parent          = macroDropdown
-        item.Size            = UDim2.new(1, -10, 0, 35)
-        item.Position        = UDim2.new(0, 5, 0, (i-1)*40 + 5)
-        item.BackgroundColor3 = colors.panelBg
-        item.BackgroundTransparency = 0.5
-        item.ZIndex          = 21
-
-        local ic = Instance.new("UICorner")
-        ic.CornerRadius = UDim.new(0, 6)
-        ic.Parent = item
-
-        local il = Instance.new("TextLabel")
-        il.Parent             = item
-        il.Size               = UDim2.new(1, -10, 1, 0)
-        il.Position           = UDim2.new(0, 10, 0, 0)
-        il.BackgroundTransparency = 1
-        il.Text               = "📄 " .. macro.name
-        il.TextColor3         = Color3.fromRGB(255, 255, 255)
-        il.Font               = Enum.Font.GothamBold
-        il.TextSize           = 12
-        il.TextXAlignment     = Enum.TextXAlignment.Left
-        il.ZIndex             = 22
-
-        local ib = Instance.new("TextButton")
-        ib.Parent             = item
-        ib.Size               = UDim2.new(1, 0, 1, 0)
-        ib.BackgroundTransparency = 1
-        ib.Text               = ""
-        ib.ZIndex             = 23
-
-        local name = macro.name
-        ib.Activated:Connect(function()      -- [ИСПРАВЛЕНО]
-            selectedMacro = name
-            for _, ch in pairs(macroLeftSection:GetChildren()) do
-                if ch.Name == "MacroSelector" then
-                    local lbl = ch:FindFirstChild("TextLabel")
-                    if lbl then
-                        lbl.Text      = "📄 " .. selectedMacro
-                        lbl.TextColor3 = colors.toggleOn
-                    end
-                end
-            end
-            macroDropdown.Visible = false
-        end)
-        ib.MouseEnter:Connect(function() item.BackgroundTransparency = 0.3 end)
-        ib.MouseLeave:Connect(function() item.BackgroundTransparency = 0.5 end)
-    end
-
-    macroDropdown.CanvasSize = UDim2.new(0, 0, 0, #macros * 40 + 10)
-end
-
--- ОБРАБОТЧИКИ ОКНА СОЗДАНИЯ
-createConfirmBtn.Activated:Connect(function()      -- [ИСПРАВЛЕНО]
-    local macroName = macroNameBox.Text
-    if macroName ~= "" then
-        table.insert(macros, {name = macroName, actions = {}})
-        createWindow.Visible = false
-        updateMacroDropdown()
-        saveMacros()
-        macroNameBox.Text = ""
-    end
-end)
-
-createCancelBtn.Activated:Connect(function()       -- [ИСПРАВЛЕНО]
-    createWindow.Visible = false
-    macroNameBox.Text    = ""
-end)
-
--- КНОПКИ MACRO ВКЛАДКИ
-local function createMacroButton(text, yPos)
-    local btn = Instance.new("TextButton")
-    btn.Parent          = macroLeftSection
-    btn.Size            = UDim2.new(0, 110, 0, 35)
-    btn.Position        = UDim2.new(0, 5, 0, yPos)
-    btn.BackgroundColor3 = colors.button
-    btn.BackgroundTransparency = 0.2
-    btn.Text            = text
-    btn.TextColor3      = Color3.fromRGB(255, 255, 255)
-    btn.Font            = Enum.Font.GothamBold
-    btn.TextSize        = 12
-    btn.ZIndex          = 5
-
-    local bc = Instance.new("UICorner")
-    bc.CornerRadius = UDim.new(0, 6)
-    bc.Parent = btn
-
-    btn.MouseEnter:Connect(function() btn.BackgroundColor3 = colors.buttonAlt; btn.BackgroundTransparency = 0 end)
-    btn.MouseLeave:Connect(function() btn.BackgroundColor3 = colors.button;    btn.BackgroundTransparency = 0.2 end)
-
-    return btn
-end
-
-local createBtn  = createMacroButton("📁 Create",  10)
-local refreshBtn = createMacroButton("🔄 Refresh", 55)
-
-createBtn.Activated:Connect(function()    -- [ИСПРАВЛЕНО]
-    createWindow.Visible = true
-    macroNameBox.Text    = ""
-end)
-
-refreshBtn.Activated:Connect(function()  -- [ИСПРАВЛЕНО]
-    updateMacroDropdown()
-    print("🔄 Список обновлён")
-end)
-
--- НАДПИСЬ LIST
-local listLabel = Instance.new("TextLabel")
-listLabel.Parent          = macroLeftSection
-listLabel.Size            = UDim2.new(0, 110, 0, 35)
-listLabel.Position        = UDim2.new(0, 5, 0, 100)
-listLabel.BackgroundColor3 = colors.button
-listLabel.BackgroundTransparency = 0.2
-listLabel.Text            = "📋 List"
-listLabel.TextColor3      = Color3.fromRGB(255, 255, 255)
-listLabel.Font            = Enum.Font.GothamBold
-listLabel.TextSize        = 12
-listLabel.ZIndex          = 5
-
-local llc = Instance.new("UICorner")
-llc.CornerRadius = UDim.new(0, 6)
-llc.Parent = listLabel
-
--- СЕЛЕКТОР МАКРОСА
-local macroSelector = Instance.new("Frame")
-macroSelector.Name          = "MacroSelector"
-macroSelector.Parent        = macroLeftSection
-macroSelector.Size          = UDim2.new(0, 200, 0, 35)
-macroSelector.Position      = UDim2.new(0, 125, 0, 100)
-macroSelector.BackgroundColor3 = colors.panelBg
-macroSelector.BackgroundTransparency = 0.5
-macroSelector.ZIndex        = 5
-
-local msc = Instance.new("UICorner")
-msc.CornerRadius = UDim.new(0, 6)
-msc.Parent = macroSelector
-
-local selectorLabel = Instance.new("TextLabel")
-selectorLabel.Parent         = macroSelector
-selectorLabel.Size           = UDim2.new(1, -30, 1, 0)
-selectorLabel.Position       = UDim2.new(0, 10, 0, 0)
-selectorLabel.BackgroundTransparency = 1
-selectorLabel.Text           = "Выберите макрос..."
-selectorLabel.TextColor3     = Color3.fromRGB(180, 180, 180)
-selectorLabel.Font           = Enum.Font.Gotham
-selectorLabel.TextSize       = 11
-selectorLabel.TextXAlignment = Enum.TextXAlignment.Left
-selectorLabel.ZIndex         = 6
-
-local arrowLabel = Instance.new("TextLabel")
-arrowLabel.Parent             = macroSelector
-arrowLabel.Size               = UDim2.new(0, 20, 1, 0)
-arrowLabel.Position           = UDim2.new(1, -25, 0, 0)
-arrowLabel.BackgroundTransparency = 1
-arrowLabel.Text               = "▼"
-arrowLabel.TextColor3         = Color3.fromRGB(180, 180, 180)
-arrowLabel.Font               = Enum.Font.GothamBold
-arrowLabel.TextSize           = 10
-arrowLabel.ZIndex             = 6
-
-local selectorBtn = Instance.new("TextButton")
-selectorBtn.Parent             = macroSelector
-selectorBtn.Size               = UDim2.new(1, 0, 1, 0)
-selectorBtn.BackgroundTransparency = 1
-selectorBtn.Text               = ""
-selectorBtn.ZIndex             = 7
-
-selectorBtn.Activated:Connect(function()    -- [ИСПРАВЛЕНО]
-    macroDropdown.Visible = not macroDropdown.Visible
-    updateMacroDropdown()
-end)
-selectorBtn.MouseEnter:Connect(function() macroSelector.BackgroundTransparency = 0.3 end)
-selectorBtn.MouseLeave:Connect(function() macroSelector.BackgroundTransparency = 0.5 end)
-
--- ШИРОКИЕ ТОГГЛЫ ДЛЯ MACRO
-local function createWideToggle(text, yPos, callback)
-    local tf = Instance.new("Frame")
-    tf.Parent               = macroLeftSection
-    tf.Size                 = UDim2.new(1, -15, 0, 40)
-    tf.Position             = UDim2.new(0, 5, 0, yPos)
-    tf.BackgroundColor3     = colors.panelBg
-    tf.BackgroundTransparency = 0.5
-    tf.ZIndex               = 4
-
-    local tc = Instance.new("UICorner")
-    tc.CornerRadius = UDim.new(0, 8)
-    tc.Parent = tf
+local function makeToggle(parent, key, label, yPos, callback)
+    local frame = Instance.new("Frame")
+    frame.Parent               = parent
+    frame.Size                 = UDim2.new(1, -14, 0, 33)
+    frame.Position             = UDim2.new(0, 7, 0, yPos)
+    frame.BackgroundColor3     = C.panel
+    frame.BackgroundTransparency = 0.35
+    frame.ZIndex               = 4
+    addCorner(frame, 8)
+    local stroke = addStroke(frame, C.accent, 1, 0.65)
 
     local lbl = Instance.new("TextLabel")
-    lbl.Parent             = tf
-    lbl.Size               = UDim2.new(1, -80, 1, 0)
-    lbl.Position           = UDim2.new(0, 10, 0, 0)
+    lbl.Parent             = frame
+    lbl.Size               = UDim2.new(1, -62, 1, 0)
+    lbl.Position           = UDim2.new(0, 8, 0, 0)
     lbl.BackgroundTransparency = 1
-    lbl.Text               = text
-    lbl.TextColor3         = Color3.fromRGB(255, 255, 255)
+    lbl.Text               = label
+    lbl.TextColor3         = C.white
     lbl.Font               = Enum.Font.GothamBold
-    lbl.TextSize           = 13
+    lbl.TextSize           = isMobile and 11 or 12
     lbl.TextXAlignment     = Enum.TextXAlignment.Left
     lbl.ZIndex             = 5
 
     local track = Instance.new("Frame")
-    track.Parent          = tf
-    track.Size            = UDim2.new(0, 45, 0, 22)
-    track.Position        = UDim2.new(1, -55, 0.5, -11)
-    track.BackgroundColor3 = colors.toggleBg
+    track.Parent          = frame
+    track.Size            = UDim2.new(0, 40, 0, 18)
+    track.Position        = UDim2.new(1, -48, 0.5, -9)
+    track.BackgroundColor3 = C.track
     track.ZIndex          = 5
-
-    local trc = Instance.new("UICorner")
-    trc.CornerRadius = UDim.new(1, 0)
-    trc.Parent = track
+    addCorner(track, 9)
 
     local knob = Instance.new("Frame")
     knob.Parent          = track
-    knob.Size            = UDim2.new(0, 18, 0, 18)
-    knob.Position        = UDim2.new(0, 2, 0.5, -9)
-    knob.BackgroundColor3 = colors.toggleOff
+    knob.Size            = UDim2.new(0, 14, 0, 14)
+    knob.Position        = UDim2.new(0, 2, 0.5, -7)
+    knob.BackgroundColor3 = C.off
     knob.ZIndex          = 6
-
-    local kc = Instance.new("UICorner")
-    kc.CornerRadius = UDim.new(1, 0)
-    kc.Parent = knob
-
-    local isEnabled = false
+    addCorner(knob, 7)
 
     local hitbox = Instance.new("TextButton")
-    hitbox.Parent             = tf
+    hitbox.Parent             = frame
     hitbox.Size               = UDim2.new(1, 0, 1, 0)
     hitbox.BackgroundTransparency = 1
     hitbox.Text               = ""
     hitbox.ZIndex             = 7
 
-    hitbox.Activated:Connect(function()     -- [ИСПРАВЛЕНО]
-        isEnabled = not isEnabled
-        if isEnabled then
-            TweenService:Create(knob, TweenInfo.new(0.3, Enum.EasingStyle.Quad),
-                {Position = UDim2.new(1, -20, 0.5, -9), BackgroundColor3 = colors.toggleOn}):Play()
-            TweenService:Create(track, TweenInfo.new(0.3),
-                {BackgroundColor3 = Color3.fromRGB(0, 150, 50)}):Play()
+    local isOn = false
+    toggleStates[key] = false
+
+    local function applyVisual(v)
+        local ti = TweenInfo.new(0.22, Enum.EasingStyle.Quad)
+        if v then
+            TweenService:Create(knob,  ti, {Position = UDim2.new(1,-16,0.5,-7), BackgroundColor3 = C.on}):Play()
+            TweenService:Create(track, ti, {BackgroundColor3 = C.trackOn}):Play()
+            TweenService:Create(stroke,TweenInfo.new(0.18),{Transparency=0, Color=C.on}):Play()
         else
-            TweenService:Create(knob, TweenInfo.new(0.3, Enum.EasingStyle.Quad),
-                {Position = UDim2.new(0, 2, 0.5, -9), BackgroundColor3 = colors.toggleOff}):Play()
-            TweenService:Create(track, TweenInfo.new(0.3),
-                {BackgroundColor3 = colors.toggleBg}):Play()
+            TweenService:Create(knob,  ti, {Position = UDim2.new(0,2,0.5,-7), BackgroundColor3 = C.off}):Play()
+            TweenService:Create(track, ti, {BackgroundColor3 = C.track}):Play()
+            TweenService:Create(stroke,TweenInfo.new(0.18),{Transparency=0.65, Color=C.accent}):Play()
         end
-        if callback then callback(isEnabled) end
+    end
+
+    local function setEnabled(v, silent)
+        isOn = v
+        toggleStates[key] = v
+        applyVisual(v)
+        if not silent and callback then callback(v) end
+    end
+
+    hitbox.Activated:Connect(function() setEnabled(not isOn) end)
+    hitbox.MouseEnter:Connect(function() frame.BackgroundTransparency = 0.15 end)
+    hitbox.MouseLeave:Connect(function() frame.BackgroundTransparency = 0.35 end)
+
+    toggleSetters[key] = setEnabled
+    return setEnabled
+end
+
+-- ==========================================
+-- ВКЛАДКА: MAIN
+-- ==========================================
+local function sectionTitle(parent, text, yPos)
+    local l = Instance.new("TextLabel")
+    l.Parent             = parent
+    l.Size               = UDim2.new(1,-14,0,20)
+    l.Position           = UDim2.new(0,7,0,yPos)
+    l.BackgroundTransparency = 1
+    l.Text               = text
+    l.TextColor3         = C.white
+    l.Font               = Enum.Font.GothamBold
+    l.TextSize           = 14
+    l.TextXAlignment     = Enum.TextXAlignment.Left
+    l.ZIndex             = 4
+    return l
+end
+
+sectionTitle(scrollMain, "⚡ MAIN", 4)
+
+makeToggle(scrollMain, "Auto Skip",       "Auto Skip",       28,  function() end)
+makeToggle(scrollMain, "Auto x2 Speed",   "Auto x2 Speed",   65,  function() end)
+makeToggle(scrollMain, "Auto x3 Speed",   "Auto x3 Speed",   102, function() end)
+makeToggle(scrollMain, "Auto Play Again", "Auto Play Again", 139, function() end)
+
+-- AUTO MODE ROW (такой же дизайн как у тоггла, но со встроенным dropdown)
+local autoRow = Instance.new("Frame")
+autoRow.Parent               = scrollMain
+autoRow.Size                 = UDim2.new(1,-14,0,33)
+autoRow.Position             = UDim2.new(0,7,0,176)
+autoRow.BackgroundColor3     = C.panel
+autoRow.BackgroundTransparency = 0.35
+autoRow.ZIndex               = 4
+addCorner(autoRow, 8)
+addStroke(autoRow, C.accent, 1, 0.65)
+
+local autoLbl = Instance.new("TextLabel")
+autoLbl.Parent             = autoRow
+autoLbl.Size               = UDim2.new(0,80,1,0)
+autoLbl.Position           = UDim2.new(0,8,0,0)
+autoLbl.BackgroundTransparency = 1
+autoLbl.Text               = "Auto Mode"
+autoLbl.TextColor3         = C.white
+autoLbl.Font               = Enum.Font.GothamBold
+autoLbl.TextSize           = isMobile and 11 or 12
+autoLbl.TextXAlignment     = Enum.TextXAlignment.Left
+autoLbl.ZIndex             = 5
+
+local wavePickBtn = Instance.new("TextButton")
+wavePickBtn.Parent          = autoRow
+wavePickBtn.Size            = UDim2.new(0,120,0,22)
+wavePickBtn.Position        = UDim2.new(1,-128,0.5,-11)
+wavePickBtn.BackgroundColor3 = C.track
+wavePickBtn.Text            = "Easy  ▼"
+wavePickBtn.TextColor3      = C.dim
+wavePickBtn.Font            = Enum.Font.Gotham
+wavePickBtn.TextSize        = 11
+wavePickBtn.ZIndex          = 5
+addCorner(wavePickBtn, 6)
+
+-- WAVE DROPDOWN
+local waveDD = Instance.new("Frame")
+waveDD.Parent               = scrollMain
+waveDD.Size                 = UDim2.new(0,120,0,0)
+waveDD.Position             = UDim2.new(1,-128,0,212)
+waveDD.BackgroundColor3     = C.bg
+waveDD.BackgroundTransparency = 0.05
+waveDD.Visible              = false
+waveDD.ClipsDescendants     = true
+waveDD.ZIndex               = 15
+addCorner(waveDD, 8)
+addStroke(waveDD, C.accent, 2)
+
+local waves   = {"Easy","Normal","Hard","Insane","Impossible","Apocalypse"}
+local waveIH  = 28
+for i, w in ipairs(waves) do
+    local item = Instance.new("TextButton")
+    item.Parent          = waveDD
+    item.Size            = UDim2.new(1,-8,0,waveIH-4)
+    item.Position        = UDim2.new(0,4,0,(i-1)*waveIH+4)
+    item.BackgroundColor3 = C.panel
+    item.BackgroundTransparency = 0.4
+    item.Text            = w
+    item.TextColor3      = C.white
+    item.Font            = Enum.Font.GothamBold
+    item.TextSize        = 11
+    item.ZIndex          = 16
+    addCorner(item, 5)
+    local wName = w
+    item.Activated:Connect(function()
+        selectedWave         = wName
+        wavePickBtn.Text     = wName .. "  ▼"
+        wavePickBtn.TextColor3 = C.on
+        TweenService:Create(waveDD,TweenInfo.new(0.18),{Size=UDim2.new(0,120,0,0)}):Play()
+        task.delay(0.18, function() waveDD.Visible = false end)
     end)
-
-    return tf
+    item.MouseEnter:Connect(function() item.BackgroundTransparency = 0.15 end)
+    item.MouseLeave:Connect(function() item.BackgroundTransparency = 0.4  end)
 end
 
-createWideToggle("⏺️ Record Macro",  145, function(e) isRecording = e end)
-createWideToggle("▶️ Play Macro",    195, function(e)
-    isPlaying = e
-    if useHotkey then hotkeyButton.Visible = e end
-end)
-createWideToggle("⏱️ Time Placement", 245, function(e) print("Time Placement:", e) end)
-createWideToggle("📍 Unit Placement", 295, function(e) print("Unit Placement:", e) end)
-createWideToggle("🔁 Loop Mode",      345, function(e) loopMode = e end)
-createWideToggle("⌨️ Hotkey",         395, function(e)
-    useHotkey = e
-    hotkeyButton.Visible = e and isPlaying
-end)
-
--- ==========================================
--- SETTINGS ВКЛАДКА
--- ==========================================
-local settingsTitle = Instance.new("TextLabel")
-settingsTitle.Parent             = settingsContainer
-settingsTitle.Size               = UDim2.new(1, -10, 0, 25)
-settingsTitle.Position           = UDim2.new(0, 5, 0, 0)
-settingsTitle.BackgroundTransparency = 1
-settingsTitle.Text               = "⚡ SETTINGS"
-settingsTitle.TextColor3         = Color3.fromRGB(255, 255, 255)
-settingsTitle.Font               = Enum.Font.GothamBold
-settingsTitle.TextSize           = 16
-settingsTitle.ZIndex             = 4
-
-local settingsPlaceholder = Instance.new("TextLabel")
-settingsPlaceholder.Parent           = settingsContainer
-settingsPlaceholder.Size             = UDim2.new(1, 0, 0, 40)
-settingsPlaceholder.Position         = UDim2.new(0, 0, 0.4, -20)
-settingsPlaceholder.BackgroundTransparency = 1
-settingsPlaceholder.Text             = "Скоро будет..."
-settingsPlaceholder.TextColor3       = Color3.fromRGB(200, 200, 255)
-settingsPlaceholder.TextTransparency = 0.3
-settingsPlaceholder.Font             = Enum.Font.Gotham
-settingsPlaceholder.TextSize         = 14
-settingsPlaceholder.ZIndex           = 4
-
--- ==========================================
--- НАВИГАЦИЯ
--- ==========================================
-local function showMain()
-    mainContainer.Visible     = true
-    macroContainer.Visible    = false
-    settingsContainer.Visible = false
-end
-
-local function showMacro()
-    mainContainer.Visible     = false
-    macroContainer.Visible    = true
-    settingsContainer.Visible = false
-    updateMacroDropdown()
-end
-
-local function showSettings()
-    mainContainer.Visible     = false
-    macroContainer.Visible    = false
-    settingsContainer.Visible = true
-end
-
--- [ИСПРАВЛЕНО] Activated вместо MouseButton1Click + TouchTap
-mainBtn.Activated:Connect(showMain)
-macroBtn.Activated:Connect(showMacro)
-settingsBtn.Activated:Connect(showSettings)
-
--- ==========================================
--- ФУТЕР
--- ==========================================
-local footer = Instance.new("TextLabel")
-footer.Parent             = mainFrame
-footer.Size               = UDim2.new(1, 0, 0, 18)
-footer.Position           = UDim2.new(0, 0, 1, -18)
-footer.BackgroundTransparency = 1
-footer.Text               = "⚡ zeexHub ⚡"
-footer.TextColor3         = Color3.fromRGB(200, 180, 255)
-footer.TextTransparency   = 0.2
-footer.Font               = Enum.Font.Gotham
-footer.TextSize           = 10
-footer.ZIndex             = 2
-
--- ==========================================
--- ЗАКРЫТИЕ ДРОПДАУНОВ ПРИ КЛИКЕ ВНЕ
--- ==========================================
-UserInputService.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-    or input.UserInputType == Enum.UserInputType.Touch then
-        local pos = UserInputService:GetMouseLocation()
-
-        local function outsideDrop(drop)
-            if not drop.Visible then return false end
-            local p = drop.AbsolutePosition
-            local s = drop.AbsoluteSize
-            return pos.X < p.X or pos.X > p.X + s.X
-                or pos.Y < p.Y or pos.Y > p.Y + s.Y
-        end
-
-        if outsideDrop(waveDropdown)  then waveDropdown.Visible  = false end
-        if outsideDrop(macroDropdown) then macroDropdown.Visible = false end
+local waveDDH = #waves * waveIH + 8
+wavePickBtn.Activated:Connect(function()
+    if waveDD.Visible then
+        TweenService:Create(waveDD,TweenInfo.new(0.18),{Size=UDim2.new(0,120,0,0)}):Play()
+        task.delay(0.18, function() waveDD.Visible = false end)
+    else
+        waveDD.Visible = true
+        waveDD.Size    = UDim2.new(0,120,0,0)
+        TweenService:Create(waveDD,TweenInfo.new(0.18),{Size=UDim2.new(0,120,0,waveDDH)}):Play()
     end
 end)
 
 -- ==========================================
--- ИНИЦИАЛИЗАЦИЯ
+-- ВКЛАДКА: MACRO
+-- ==========================================
+sectionTitle(scrollMacro, "⚡ MACRO", 4)
+
+-- Small action buttons
+local function smallBtn(parent, text, x, y, w, h)
+    local b = Instance.new("TextButton")
+    b.Parent          = parent
+    b.Size            = UDim2.new(0,w or 90,0,h or 26)
+    b.Position        = UDim2.new(0,x,0,y)
+    b.BackgroundColor3 = C.btn
+    b.Text            = text
+    b.TextColor3      = C.white
+    b.Font            = Enum.Font.GothamBold
+    b.TextSize        = 10
+    b.ZIndex          = 4
+    addCorner(b, 6)
+    b.MouseEnter:Connect(function() b.BackgroundColor3 = C.btnHover end)
+    b.MouseLeave:Connect(function() b.BackgroundColor3 = C.btn      end)
+    return b
+end
+
+local mCreateBtn  = smallBtn(scrollMacro, "📁 Create",  7, 28, 90, 26)
+local mRefreshBtn = smallBtn(scrollMacro, "🔄 Refresh", 7, 58, 90, 26)
+
+-- LIST LABEL
+local listFrame = Instance.new("Frame")
+listFrame.Parent          = scrollMacro
+listFrame.Size            = UDim2.new(0,90,0,26)
+listFrame.Position        = UDim2.new(0,7,0,88)
+listFrame.BackgroundColor3 = C.btn
+listFrame.BackgroundTransparency = 0.2
+listFrame.ZIndex          = 4
+addCorner(listFrame, 6)
+local listFrameLbl = Instance.new("TextLabel")
+listFrameLbl.Parent             = listFrame
+listFrameLbl.Size               = UDim2.new(1,0,1,0)
+listFrameLbl.BackgroundTransparency = 1
+listFrameLbl.Text               = "📋 List"
+listFrameLbl.TextColor3         = C.white
+listFrameLbl.Font               = Enum.Font.GothamBold
+listFrameLbl.TextSize           = 10
+listFrameLbl.ZIndex             = 5
+
+-- MACRO SELECTOR
+local macroSelBtn = Instance.new("TextButton")
+macroSelBtn.Parent          = scrollMacro
+macroSelBtn.Size            = UDim2.new(1,-104,0,26)
+macroSelBtn.Position        = UDim2.new(0,100,0,88)
+macroSelBtn.BackgroundColor3 = C.panel
+macroSelBtn.BackgroundTransparency = 0.3
+macroSelBtn.Text            = ""
+macroSelBtn.ZIndex          = 4
+addCorner(macroSelBtn, 6)
+
+local macroSelLbl = Instance.new("TextLabel")
+macroSelLbl.Parent             = macroSelBtn
+macroSelLbl.Size               = UDim2.new(1,-20,1,0)
+macroSelLbl.Position           = UDim2.new(0,8,0,0)
+macroSelLbl.BackgroundTransparency = 1
+macroSelLbl.Text               = "Выберите макрос..."
+macroSelLbl.TextColor3         = C.dim
+macroSelLbl.Font               = Enum.Font.Gotham
+macroSelLbl.TextSize           = 10
+macroSelLbl.TextXAlignment     = Enum.TextXAlignment.Left
+macroSelLbl.ZIndex             = 5
+
+local macroSelArrow = Instance.new("TextLabel")
+macroSelArrow.Parent             = macroSelBtn
+macroSelArrow.Size               = UDim2.new(0,16,1,0)
+macroSelArrow.Position           = UDim2.new(1,-18,0,0)
+macroSelArrow.BackgroundTransparency = 1
+macroSelArrow.Text               = "▼"
+macroSelArrow.TextColor3         = C.dim
+macroSelArrow.Font               = Enum.Font.GothamBold
+macroSelArrow.TextSize           = 9
+macroSelArrow.ZIndex             = 5
+
+macroSelBtn.MouseEnter:Connect(function() macroSelBtn.BackgroundTransparency = 0.1 end)
+macroSelBtn.MouseLeave:Connect(function() macroSelBtn.BackgroundTransparency = 0.3 end)
+
+-- MACRO DROPDOWN
+local macroDD = Instance.new("ScrollingFrame")
+macroDD.Parent               = scrollMacro
+macroDD.Size                 = UDim2.new(1,-104,0,0)
+macroDD.Position             = UDim2.new(0,100,0,117)
+macroDD.BackgroundColor3     = C.bg
+macroDD.BackgroundTransparency = 0.05
+macroDD.Visible              = false
+macroDD.ZIndex               = 15
+macroDD.ScrollBarThickness   = 3
+macroDD.ScrollBarImageColor3 = C.accent
+macroDD.BorderSizePixel      = 0
+macroDD.ClipsDescendants     = true
+addCorner(macroDD, 8)
+addStroke(macroDD, C.accent, 2)
+
+local function refreshMacroDD()
+    for _, ch in pairs(macroDD:GetChildren()) do
+        if ch:IsA("TextButton") then ch:Destroy() end
+    end
+    for i, mac in ipairs(macros) do
+        local item = Instance.new("TextButton")
+        item.Parent          = macroDD
+        item.Size            = UDim2.new(1,-8,0,26)
+        item.Position        = UDim2.new(0,4,0,(i-1)*30+4)
+        item.BackgroundColor3 = C.panel
+        item.BackgroundTransparency = 0.4
+        item.Text            = "📄 "..mac.name
+        item.TextColor3      = C.white
+        item.Font            = Enum.Font.GothamBold
+        item.TextSize        = 10
+        item.TextXAlignment  = Enum.TextXAlignment.Left
+        item.ZIndex          = 16
+        addCorner(item, 5)
+        local n = mac.name
+        item.Activated:Connect(function()
+            selectedMacro       = n
+            macroSelLbl.Text    = "📄 "..n
+            macroSelLbl.TextColor3 = C.on
+            macroDD.Visible     = false
+        end)
+        item.MouseEnter:Connect(function() item.BackgroundTransparency = 0.15 end)
+        item.MouseLeave:Connect(function() item.BackgroundTransparency = 0.4  end)
+    end
+    macroDD.CanvasSize = UDim2.new(0,0,0,#macros*30+8)
+end
+
+macroSelBtn.Activated:Connect(function()
+    refreshMacroDD()
+    if macroDD.Visible then
+        macroDD.Visible = false
+    else
+        macroDD.Visible = true
+    end
+end)
+
+-- WIDE TOGGLES (MACRO)
+makeToggle(scrollMacro, "Record Macro",   "⏺ Record Macro",   120, function(v) isRecording = v end)
+makeToggle(scrollMacro, "Play Macro",     "▶ Play Macro",      157, function(v)
+    isPlaying = v
+    if useHotkey then hotkeyBtn.Visible = v end
+end)
+makeToggle(scrollMacro, "Time Placement", "⏱ Time Placement",  194, function(v) end)
+makeToggle(scrollMacro, "Unit Placement", "📍 Unit Placement",  231, function(v) end)
+makeToggle(scrollMacro, "Loop Mode",      "🔁 Loop Mode",       268, function(v) loopMode = v end)
+makeToggle(scrollMacro, "Hotkey",         "⌨ Hotkey",          305, function(v)
+    useHotkey = v
+    hotkeyBtn.Visible = v and isPlaying
+end)
+
+-- CREATE MACRO WINDOW
+local createMacroWin = Instance.new("Frame")
+createMacroWin.Parent          = screenGui
+createMacroWin.Size            = UDim2.new(0,270,0,138)
+createMacroWin.Position        = UDim2.new(0.5,-135,0.5,-69)
+createMacroWin.BackgroundColor3 = C.bg
+createMacroWin.BackgroundTransparency = 0.05
+createMacroWin.Visible         = false
+createMacroWin.ZIndex          = 50
+addCorner(createMacroWin, 12)
+addStroke(createMacroWin, C.accent, 3)
+
+local function popupTitle(win, text)
+    local l = Instance.new("TextLabel")
+    l.Parent             = win
+    l.Size               = UDim2.new(1,-16,0,26)
+    l.Position           = UDim2.new(0,8,0,8)
+    l.BackgroundTransparency = 1
+    l.Text               = text
+    l.TextColor3         = C.white
+    l.Font               = Enum.Font.GothamBold
+    l.TextSize           = 13
+    l.TextXAlignment     = Enum.TextXAlignment.Left
+    l.ZIndex             = 51
+end
+
+local function popupBox(win, placeholder)
+    local box = Instance.new("TextBox")
+    box.Parent          = win
+    box.Size            = UDim2.new(1,-20,0,30)
+    box.Position        = UDim2.new(0,10,0,40)
+    box.BackgroundColor3 = C.panel
+    box.BackgroundTransparency = 0.2
+    box.Text            = ""
+    box.PlaceholderText = placeholder
+    box.TextColor3      = C.white
+    box.PlaceholderColor3 = C.dim
+    box.Font            = Enum.Font.Gotham
+    box.TextSize        = 12
+    box.ZIndex          = 51
+    addCorner(box, 7)
+    return box
+end
+
+local function popupBtns(win, onConfirm, onCancel)
+    local confirm = Instance.new("TextButton")
+    confirm.Parent          = win
+    confirm.Size            = UDim2.new(0,110,0,28)
+    confirm.Position        = UDim2.new(0,10,1,-38)
+    confirm.BackgroundColor3 = C.on
+    confirm.Text            = "✓ SAVE"
+    confirm.TextColor3      = C.white
+    confirm.Font            = Enum.Font.GothamBold
+    confirm.TextSize        = 12
+    confirm.ZIndex          = 51
+    addCorner(confirm, 7)
+
+    local cancel = Instance.new("TextButton")
+    cancel.Parent          = win
+    cancel.Size            = UDim2.new(0,110,0,28)
+    cancel.Position        = UDim2.new(1,-120,1,-38)
+    cancel.BackgroundColor3 = C.danger
+    cancel.Text            = "✕ CANCEL"
+    cancel.TextColor3      = C.white
+    cancel.Font            = Enum.Font.GothamBold
+    cancel.TextSize        = 12
+    cancel.ZIndex          = 51
+    addCorner(cancel, 7)
+
+    confirm.Activated:Connect(onConfirm)
+    cancel.Activated:Connect(onCancel)
+    return confirm, cancel
+end
+
+popupTitle(createMacroWin, "📁 CREATE MACRO")
+local macroNameBox = popupBox(createMacroWin, "Название макроса...")
+popupBtns(createMacroWin,
+    function()
+        local n = macroNameBox.Text
+        if n ~= "" then
+            table.insert(macros, {name=n, actions={}})
+            createMacroWin.Visible = false
+            macroNameBox.Text = ""
+            refreshMacroDD()
+            saveMacros()
+        end
+    end,
+    function()
+        createMacroWin.Visible = false
+        macroNameBox.Text = ""
+    end
+)
+
+mCreateBtn.Activated:Connect(function()
+    createMacroWin.Visible = true
+    macroNameBox.Text = ""
+end)
+mRefreshBtn.Activated:Connect(refreshMacroDD)
+
+-- ==========================================
+-- ВКЛАДКА: SETTINGS
+-- ==========================================
+sectionTitle(scrollSettings, "⚡ SETTINGS", 4)
+
+-- CONFIG ROW (дизайн как у Auto Mode)
+local cfgRow = Instance.new("Frame")
+cfgRow.Parent               = scrollSettings
+cfgRow.Size                 = UDim2.new(1,-14,0,33)
+cfgRow.Position             = UDim2.new(0,7,0,28)
+cfgRow.BackgroundColor3     = C.panel
+cfgRow.BackgroundTransparency = 0.35
+cfgRow.ZIndex               = 4
+addCorner(cfgRow, 8)
+addStroke(cfgRow, C.accent, 1, 0.65)
+
+local cfgRowLbl = Instance.new("TextLabel")
+cfgRowLbl.Parent             = cfgRow
+cfgRowLbl.Size               = UDim2.new(0,55,1,0)
+cfgRowLbl.Position           = UDim2.new(0,8,0,0)
+cfgRowLbl.BackgroundTransparency = 1
+cfgRowLbl.Text               = "Config"
+cfgRowLbl.TextColor3         = C.white
+cfgRowLbl.Font               = Enum.Font.GothamBold
+cfgRowLbl.TextSize           = isMobile and 11 or 12
+cfgRowLbl.TextXAlignment     = Enum.TextXAlignment.Left
+cfgRowLbl.ZIndex             = 5
+
+-- 3 КНОПКИ: Create | List | Load
+local BW = 56
+local GAP = 4
+local cfgCreateBtn = Instance.new("TextButton")
+cfgCreateBtn.Parent          = cfgRow
+cfgCreateBtn.Size            = UDim2.new(0,BW,0,22)
+cfgCreateBtn.Position        = UDim2.new(1,-(BW*3+GAP*2+6),0.5,-11)
+cfgCreateBtn.BackgroundColor3 = C.btn
+cfgCreateBtn.Text            = "Create"
+cfgCreateBtn.TextColor3      = C.white
+cfgCreateBtn.Font            = Enum.Font.GothamBold
+cfgCreateBtn.TextSize        = 10
+cfgCreateBtn.ZIndex          = 5
+addCorner(cfgCreateBtn, 5)
+cfgCreateBtn.MouseEnter:Connect(function() cfgCreateBtn.BackgroundColor3 = C.btnHover end)
+cfgCreateBtn.MouseLeave:Connect(function() cfgCreateBtn.BackgroundColor3 = C.btn      end)
+
+local cfgListBtn = Instance.new("TextButton")
+cfgListBtn.Parent          = cfgRow
+cfgListBtn.Size            = UDim2.new(0,BW,0,22)
+cfgListBtn.Position        = UDim2.new(1,-(BW*2+GAP*1+6),0.5,-11)
+cfgListBtn.BackgroundColor3 = C.btn
+cfgListBtn.Text            = "List"
+cfgListBtn.TextColor3      = C.white
+cfgListBtn.Font            = Enum.Font.GothamBold
+cfgListBtn.TextSize        = 10
+cfgListBtn.ZIndex          = 5
+addCorner(cfgListBtn, 5)
+cfgListBtn.MouseEnter:Connect(function() cfgListBtn.BackgroundColor3 = C.btnHover end)
+cfgListBtn.MouseLeave:Connect(function() cfgListBtn.BackgroundColor3 = C.btn      end)
+
+local cfgLoadBtn = Instance.new("TextButton")
+cfgLoadBtn.Parent          = cfgRow
+cfgLoadBtn.Size            = UDim2.new(0,BW,0,22)
+cfgLoadBtn.Position        = UDim2.new(1,-(BW+6),0.5,-11)
+cfgLoadBtn.BackgroundColor3 = C.btn
+cfgLoadBtn.Text            = "Load"
+cfgLoadBtn.TextColor3      = C.white
+cfgLoadBtn.Font            = Enum.Font.GothamBold
+cfgLoadBtn.TextSize        = 10
+cfgLoadBtn.ZIndex          = 5
+addCorner(cfgLoadBtn, 5)
+cfgLoadBtn.MouseEnter:Connect(function() cfgLoadBtn.BackgroundColor3 = C.btnHover end)
+cfgLoadBtn.MouseLeave:Connect(function() cfgLoadBtn.BackgroundColor3 = C.btn      end)
+
+-- СТАТУС ВЫБРАННОГО КОНФИГА
+local cfgStatusLbl = Instance.new("TextLabel")
+cfgStatusLbl.Parent             = scrollSettings
+cfgStatusLbl.Size               = UDim2.new(1,-14,0,16)
+cfgStatusLbl.Position           = UDim2.new(0,7,0,64)
+cfgStatusLbl.BackgroundTransparency = 1
+cfgStatusLbl.Text               = "Конфиг не выбран"
+cfgStatusLbl.TextColor3         = C.dim
+cfgStatusLbl.Font               = Enum.Font.Gotham
+cfgStatusLbl.TextSize           = 10
+cfgStatusLbl.TextXAlignment     = Enum.TextXAlignment.Left
+cfgStatusLbl.ZIndex             = 4
+
+-- CONFIG DROPDOWN СПИСОК
+local cfgDD = Instance.new("ScrollingFrame")
+cfgDD.Parent               = scrollSettings
+cfgDD.Size                 = UDim2.new(1,-14,0,0)
+cfgDD.Position             = UDim2.new(0,7,0,82)
+cfgDD.BackgroundColor3     = C.bg
+cfgDD.BackgroundTransparency = 0.05
+cfgDD.Visible              = false
+cfgDD.ClipsDescendants     = true
+cfgDD.ZIndex               = 10
+cfgDD.ScrollBarThickness   = 3
+cfgDD.ScrollBarImageColor3 = C.accent
+cfgDD.BorderSizePixel      = 0
+addCorner(cfgDD, 8)
+addStroke(cfgDD, C.accent, 2)
+
+local function refreshCfgDD()
+    for _, ch in pairs(cfgDD:GetChildren()) do
+        if ch:IsA("TextButton") then ch:Destroy() end
+    end
+    for i, cfg in ipairs(configs) do
+        local isSel = (cfg.name == selectedConfig)
+        local item = Instance.new("TextButton")
+        item.Parent          = cfgDD
+        item.Size            = UDim2.new(1,-8,0,26)
+        item.Position        = UDim2.new(0,4,0,(i-1)*30+4)
+        item.BackgroundColor3 = C.panel
+        item.BackgroundTransparency = isSel and 0.05 or 0.4
+        item.Text            = "⚙️ "..cfg.name
+        item.TextColor3      = isSel and C.on or C.white
+        item.Font            = Enum.Font.GothamBold
+        item.TextSize        = 10
+        item.TextXAlignment  = Enum.TextXAlignment.Left
+        item.ZIndex          = 11
+        addCorner(item, 5)
+        local n = cfg.name
+        item.Activated:Connect(function()
+            selectedConfig      = n
+            cfgStatusLbl.Text   = "Выбран: "..n
+            cfgStatusLbl.TextColor3 = C.on
+            refreshCfgDD()
+        end)
+        item.MouseEnter:Connect(function() if selectedConfig ~= cfg.name then item.BackgroundTransparency = 0.2 end end)
+        item.MouseLeave:Connect(function() if selectedConfig ~= cfg.name then item.BackgroundTransparency = 0.4 end end)
+    end
+    cfgDD.CanvasSize = UDim2.new(0,0,0,#configs*30+8)
+    local targetH = math.min(#configs*30+8, 150)
+    if cfgDD.Visible then
+        TweenService:Create(cfgDD,TweenInfo.new(0.18),{Size=UDim2.new(1,-14,0,targetH)}):Play()
+    end
+end
+
+-- LIST BUTTON
+cfgListBtn.Activated:Connect(function()
+    if cfgDD.Visible then
+        TweenService:Create(cfgDD,TweenInfo.new(0.18),{Size=UDim2.new(1,-14,0,0)}):Play()
+        task.delay(0.18, function() cfgDD.Visible = false end)
+    else
+        cfgDD.Visible = true
+        cfgDD.Size    = UDim2.new(1,-14,0,0)
+        refreshCfgDD()
+    end
+end)
+
+-- CREATE CONFIG WINDOW
+local createCfgWin = Instance.new("Frame")
+createCfgWin.Parent          = screenGui
+createCfgWin.Size            = UDim2.new(0,270,0,138)
+createCfgWin.Position        = UDim2.new(0.5,-135,0.5,-69)
+createCfgWin.BackgroundColor3 = C.bg
+createCfgWin.BackgroundTransparency = 0.05
+createCfgWin.Visible         = false
+createCfgWin.ZIndex          = 50
+addCorner(createCfgWin, 12)
+addStroke(createCfgWin, C.accent, 3)
+
+popupTitle(createCfgWin, "⚙️ CREATE CONFIG")
+local cfgNameBox = popupBox(createCfgWin, "Название конфига...")
+popupBtns(createCfgWin,
+    function()
+        local n = cfgNameBox.Text
+        if n == "" then return end
+
+        -- Снапшот всех состояний
+        local snapshot = {}
+        for k, v in pairs(toggleStates) do
+            snapshot[k] = v
+        end
+        snapshot["_wave"] = selectedWave
+
+        -- Перезаписать если существует
+        local found = false
+        for i, cfg in ipairs(configs) do
+            if cfg.name == n then
+                configs[i].states = snapshot
+                found = true
+                break
+            end
+        end
+        if not found then
+            table.insert(configs, {name=n, states=snapshot})
+        end
+
+        createCfgWin.Visible = false
+        cfgNameBox.Text = ""
+        saveConfigs()
+        refreshCfgDD()
+        print("✅ Config saved:", n)
+    end,
+    function()
+        createCfgWin.Visible = false
+        cfgNameBox.Text = ""
+    end
+)
+
+cfgCreateBtn.Activated:Connect(function()
+    createCfgWin.Visible = true
+    cfgNameBox.Text = ""
+end)
+
+-- LOAD CONFIG
+cfgLoadBtn.Activated:Connect(function()
+    if not selectedConfig then
+        print("❌ Сначала выберите конфиг в List!")
+        return
+    end
+    for _, cfg in ipairs(configs) do
+        if cfg.name == selectedConfig then
+            for key, val in pairs(cfg.states) do
+                if key == "_wave" then
+                    selectedWave           = val
+                    wavePickBtn.Text       = val.."  ▼"
+                    wavePickBtn.TextColor3 = C.on
+                elseif toggleSetters[key] then
+                    toggleSetters[key](val, false)
+                end
+            end
+            print("✅ Config loaded:", selectedConfig)
+            return
+        end
+    end
+end)
+
+-- ==========================================
+-- NAVIGATION
+-- ==========================================
+local function showTab(name)
+    scrollMain.Visible     = name == "main"
+    scrollMacro.Visible    = name == "macro"
+    scrollSettings.Visible = name == "settings"
+    -- закрыть все дропдауны
+    waveDD.Visible  = false
+    macroDD.Visible = false
+    if name ~= "settings" then
+        cfgDD.Visible = false
+    end
+end
+
+navMain.Activated:Connect(function()     showTab("main")     end)
+navMacro.Activated:Connect(function()    showTab("macro")    end)
+navSettings.Activated:Connect(function() showTab("settings") end)
+
+-- ==========================================
+-- FOOTER
+-- ==========================================
+local footer = Instance.new("TextLabel")
+footer.Parent             = mainFrame
+footer.Size               = UDim2.new(1,0,0,FOOTER_H)
+footer.Position           = UDim2.new(0,0,1,-FOOTER_H)
+footer.BackgroundTransparency = 1
+footer.Text               = "⚡ zeexHub  by zeenixxs ⚡"
+footer.TextColor3         = Color3.fromRGB(200,180,255)
+footer.TextTransparency   = 0.35
+footer.Font               = Enum.Font.Gotham
+footer.TextSize           = 9
+footer.ZIndex             = 2
+
+-- ==========================================
+-- ЗАКРЫТИЕ ДРОПДАУНОВ ПРИ КЛИКЕ СНАРУЖИ
+-- ==========================================
+UserInputService.InputBegan:Connect(function(inp)
+    if inp.UserInputType ~= Enum.UserInputType.MouseButton1
+    and inp.UserInputType ~= Enum.UserInputType.Touch then return end
+    local p = UserInputService:GetMouseLocation()
+    local function outside(el)
+        if not el.Visible then return false end
+        local ep, es = el.AbsolutePosition, el.AbsoluteSize
+        return p.X < ep.X or p.X > ep.X+es.X or p.Y < ep.Y or p.Y > ep.Y+es.Y
+    end
+    if outside(waveDD)  then
+        TweenService:Create(waveDD,TweenInfo.new(0.15),{Size=UDim2.new(0,120,0,0)}):Play()
+        task.delay(0.15, function() waveDD.Visible = false end)
+    end
+    if outside(macroDD) then macroDD.Visible = false end
+    if outside(cfgDD)   then
+        TweenService:Create(cfgDD,TweenInfo.new(0.15),{Size=UDim2.new(1,-14,0,0)}):Play()
+        task.delay(0.15, function() cfgDD.Visible = false end)
+    end
+end)
+
+-- ==========================================
+-- INIT
 -- ==========================================
 loadMacros()
-updateMacroDropdown()
+loadConfigs()
+refreshMacroDD()
+refreshCfgDD()
 
 print("========================================")
-print("✅ ZeexHub загружен")
-print(isMobile and "📱 Мобильная версия" or "🖥️ ПК версия")
+print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
 print("⚡ by zeenixxs")
 print("========================================")
