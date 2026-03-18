@@ -1576,16 +1576,30 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - PURE FIRECONNECTION
+-- AUTO SKIP - НАСТОЯЩАЯ UI НАВИГАЦИЯ
 -- ==========================================
 
+local GuiService = game:GetService("GuiService")
+local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local player = game:GetService("Players").LocalPlayer
 local gui = player:WaitForChild("PlayerGui")
 
 task.wait(3)
 
--- Поиск кнопки
+-- Включаем режим геймпада (чтобы работала навигация)
+local function enableGamepadMode()
+    pcall(function()
+        -- Включаем GamepadEnabled
+        UserInputService.MouseIconEnabled = false
+        
+        -- Принудительно активируем GUI навигацию
+        GuiService.AutoSelectGuiEnabled = true
+        GuiService.GuiNavigationEnabled = true
+    end)
+end
+
+-- Поиск кнопки Skip
 local function findSkipButton()
     local ok, btn = pcall(function()
         return gui.GameGui.Screen.Middle.SandboxMenu.SandboxMenu.Frame.Items.Items.Waves.GoToWave.Items.Items.Button
@@ -1593,85 +1607,77 @@ local function findSkipButton()
     return ok and btn or nil
 end
 
--- ЧИСТЫЙ КЛИК - только fireconnection
-local function pureClick(button)
+-- НАСТОЯЩИЙ КЛИК ЧЕРЕЗ UI НАВИГАЦИЮ
+local function navigateAndClick(button)
     if not button or not button.Parent then return false end
-    if not button.Visible or not button.Active then return false end
+    if not button.Visible then return false end
     
     local success = false
     
-    -- Активируем кнопку принудительно
-    button.Active = true
-    
-    -- Фаерим ВСЕ подключенные функции
     pcall(function()
-        -- 1. MouseButton1Down
-        local connections = getconnections(button.MouseButton1Down)
-        for _, connection in pairs(connections) do
-            connection:Fire()
+        -- Сохраняем предыдущее состояние
+        local previousSelected = GuiService.SelectedObject
+        local previousSelectable = button.Selectable
+        
+        -- Делаем кнопку доступной для навигации
+        button.Selectable = true
+        button.Active = true
+        
+        -- ВЫБИРАЕМ кнопку (это создаст синюю подсветку)
+        GuiService.SelectedObject = button
+        
+        -- Ждём чтобы выбор применился
+        RunService.RenderStepped:Wait()
+        
+        -- Теперь АКТИВИРУЕМ выбранный элемент
+        -- Это эквивалент нажатия Enter/Space/ButtonA на выбранном элементе
+        
+        -- Способ 1: Прямая активация выбранного объекта
+        if GuiService.SelectedObject == button then
+            -- Фаерим Activated (это событие которое срабатывает при навигации)
+            for _, connection in pairs(getconnections(button.Activated)) do
+                connection:Fire()
+                success = true
+            end
         end
-    end)
-    
-    task.wait(0.02)
-    
-    pcall(function()
-        -- 2. MouseButton1Up
-        local connections = getconnections(button.MouseButton1Up)
-        for _, connection in pairs(connections) do
-            connection:Fire()
-        end
-    end)
-    
-    task.wait(0.02)
-    
-    pcall(function()
-        -- 3. MouseButton1Click
-        local connections = getconnections(button.MouseButton1Click)
-        for _, connection in pairs(connections) do
-            connection:Fire()
-            success = true
-        end
-    end)
-    
-    pcall(function()
-        -- 4. Activated
-        local connections = getconnections(button.Activated)
-        for _, connection in pairs(connections) do
+        
+        -- Способ 2: Симуляция нажатия ButtonA/Return на выбранном объекте
+        for _, connection in pairs(getconnections(button.MouseButton1Click)) do
             connection:Fire()
             success = true
         end
+        
+        -- Ждём перед возвратом
+        task.wait(0.1)
+        
+        -- Возвращаем всё назад
+        GuiService.SelectedObject = previousSelected
+        button.Selectable = previousSelectable
     end)
-    
-    -- 5. Попытка через firesignal (если есть)
-    if firesignal then
-        pcall(function()
-            firesignal(button.MouseButton1Click)
-            success = true
-        end)
-    end
     
     return success
 end
 
--- Состояние
+-- Переменные
 local skipButton = nil
-local lastClick = 0
-local lastSearch = 0
+local lastAction = 0
+local lastRefresh = 0
 local clickCount = 0
-local maxClicks = 10
 
-local CLICK_DELAY = 0.3
-local SEARCH_DELAY = 2.0
+local ACTION_INTERVAL = 0.4
+local REFRESH_INTERVAL = 2.5
+
+-- Инициализация
+enableGamepadMode()
 
 -- Главный цикл
-local conn
-conn = RunService.Heartbeat:Connect(function()
+local autoSkipConn
+autoSkipConn = RunService.Heartbeat:Connect(function()
     if not toggleStates then
-        conn:Disconnect()
+        autoSkipConn:Disconnect()
         return
     end
     
-    -- Работаем только если включён Auto Skip
     if not toggleStates["Auto Skip"] then
         clickCount = 0
         return
@@ -1679,39 +1685,31 @@ conn = RunService.Heartbeat:Connect(function()
     
     local now = tick()
     
-    -- Поиск кнопки
-    if now - lastSearch >= SEARCH_DELAY then
-        lastSearch = now
-        local old = skipButton
+    -- Обновление кнопки
+    if now - lastRefresh >= REFRESH_INTERVAL then
+        lastRefresh = now
         skipButton = findSkipButton()
-        
-        if skipButton and skipButton ~= old then
-            clickCount = 0
-        end
     end
     
-    -- Клик
-    if now - lastClick >= CLICK_DELAY then
-        -- Проверяем кнопку
+    -- Действие
+    if now - lastAction >= ACTION_INTERVAL then
         if not skipButton or not skipButton.Parent then
             skipButton = findSkipButton()
         end
         
-        -- Если кнопка видна и не превышен лимит кликов
-        if skipButton and skipButton.Visible and clickCount < maxClicks then
-            if pureClick(skipButton) then
-                lastClick = now
+        if skipButton and skipButton.Visible and skipButton.Active then
+            if navigateAndClick(skipButton) then
+                lastAction = now
                 clickCount = clickCount + 1
                 
                 if toggleStates["Notifications"] then
-                    warn(string.format("⏭️ [SKIP] #%d/%d", clickCount, maxClicks))
+                    warn(string.format("⏭️ [AUTO SKIP] Click #%d", clickCount))
                 end
             end
-        elseif not skipButton or not skipButton.Visible then
-            -- Кнопка исчезла - сбрасываем счётчик
+        else
             if clickCount > 0 then
                 if toggleStates["Notifications"] then
-                    print(string.format("✅ [SKIP] Done (%d clicks)", clickCount))
+                    print(string.format("✅ [AUTO SKIP] Session done (%d clicks)", clickCount))
                 end
                 clickCount = 0
             end
@@ -1722,16 +1720,26 @@ end)
 -- Респавн
 player.CharacterAdded:Connect(function()
     task.wait(3)
+    enableGamepadMode()
     skipButton = nil
     clickCount = 0
-    lastClick = 0
-    lastSearch = 0
+    lastAction = 0
+    lastRefresh = 0
+end)
+
+-- Обновление при добавлении элементов
+gui.DescendantAdded:Connect(function(obj)
+    if obj.Name == "Button" then
+        task.wait(0.3)
+        skipButton = findSkipButton()
+    end
 end)
 
 print("========================================")
-print("✅ AUTO SKIP LOADED (Pure Method)")
-print("   Click delay:", CLICK_DELAY, "sec")
-print("   Max clicks:", maxClicks)
+print("✅ AUTO SKIP (TRUE UI NAVIGATION)")
+print("   Method: GuiService.SelectedObject")
+print("   + Activated event")
+print("   Interval:", ACTION_INTERVAL, "sec")
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
