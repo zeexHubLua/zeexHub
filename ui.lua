@@ -296,7 +296,7 @@ leftPanel.Size                 = UDim2.new(0, LEFT_W, 0, CONTENT_H)
 leftPanel.Position             = UDim2.new(0, 4, 0, CONTENT_Y)
 leftPanel.BackgroundColor3     = C.panel
 leftPanel.BackgroundTransparency = 0.2
-leftPanel.ZIndex               = 2
+leftPanel.ZIndex               = 49
 addCorner(leftPanel, 10)
 addStroke(leftPanel, C.accent, 2)
 
