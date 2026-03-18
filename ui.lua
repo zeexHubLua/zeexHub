@@ -1576,119 +1576,94 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - РАБОЧАЯ ВЕРСИЯ
+-- DEBUG - НАЙДЁМ КНОПКУ ИГРЫ
 -- ==========================================
 
-local RunService = game:GetService("RunService")
-
-task.wait(3)
-
--- Ищем ТВОЮ кнопку Auto Skip в GUI
-local function findYourAutoSkipButton()
-    -- Ищем в scrollMain где у тебя toggle Auto Skip
-    for _, frame in pairs(scrollMain:GetChildren()) do
-        if frame:IsA("Frame") then
-            -- Проверяем есть ли TextLabel с текстом "Auto Skip"
-            local label = frame:FindFirstChild("TextLabel")
-            if label and label:IsA("TextLabel") and label.Text == "Auto Skip" then
-                -- Нашли фрейм с Auto Skip, теперь ищем hitbox (TextButton)
-                for _, child in pairs(frame:GetChildren()) do
-                    if child:IsA("TextButton") and child.Text == "" then
-                        return child, frame
-                    end
-                end
-            end
-        end
-    end
-    return nil, nil
-end
-
--- Проверка включён ли toggle (смотрим на цвет knob)
-local function isToggleOn(toggleFrame)
-    if not toggleFrame then return false end
-    
-    local track = toggleFrame:FindFirstChild("Frame") -- track
-    if track then
-        local knob = track:FindFirstChild("Frame") -- knob
-        if knob then
-            -- Если knob справа (Position.X.Scale > 0.5) = ON
-            return knob.Position.X.Scale > 0.5 or knob.Position.X.Offset > 20
-        end
-    end
-    
-    return false
-end
-
--- Функция клика
-local function clickButton(button)
-    if not button or not button.Parent then return false end
-    
-    local success = false
-    
-    pcall(function()
-        -- Метод 1: Activated
-        for _, conn in pairs(getconnections(button.Activated)) do
-            conn:Fire()
-            success = true
-        end
-    end)
-    
-    if not success then
-        pcall(function()
-            -- Метод 2: MouseButton1Click
-            for _, conn in pairs(getconnections(button.MouseButton1Click)) do
-                conn:Fire()
-                success = true
-            end
-        end)
-    end
-    
-    return success
-end
-
--- Таймер
-local lastCheck = 0
-local CHECK_INTERVAL = 2.0
-
--- Главный цикл
-local autoSkipConnection
-autoSkipConnection = RunService.Heartbeat:Connect(function()
-    if not toggleStates then
-        autoSkipConnection:Disconnect()
-        return
-    end
-    
-    -- Работаем ТОЛЬКО если включён Auto Skip В НАШЕМ GUI
-    if toggleStates["Auto Skip"] then
-        local now = tick()
-        if now - lastCheck < CHECK_INTERVAL then return end
-        lastCheck = now
-        
-        -- Ищем кнопку
-        local skipButton, skipFrame = findYourAutoSkipButton()
-        
-        if skipButton and skipFrame then
-            -- Проверяем текущее состояние
-            local isOn = isToggleOn(skipFrame)
-            
-            -- Если выключен - включаем
-            if not isOn then
-                if clickButton(skipButton) then
-                    if toggleStates["Notifications"] then
-                        warn("⏭️ [AUTO SKIP] Clicked! (was OFF)")
-                    end
-                end
-            end
-        else
-            if toggleStates["Notifications"] then
-                warn("⚠️ [AUTO SKIP] Button not found!")
-            end
-        end
-    end
-end)
+task.wait(5)
 
 print("========================================")
-print("✅ AUTO SKIP READY")
+print("🔍 ПОИСК КНОПКИ AUTO SKIP В ИГРЕ...")
+print("========================================")
+
+local player = game:GetService("Players").LocalPlayer
+local gui = player:WaitForChild("PlayerGui")
+
+-- Ищем кнопку Skip в ИГРЕ (не в нашем GUI)
+local function findGameSkipButton()
+    for _, obj in pairs(gui:GetDescendants()) do
+        if obj:IsA("TextButton") or obj:IsA("ImageButton") then
+            local path = obj:GetFullName()
+            
+            -- ТВОИ ДАННЫЕ: Button в Items, размер ~103x26
+            if obj.Name == "Button" and obj.Parent and obj.Parent.Name == "Items" then
+                local size = obj.AbsoluteSize
+                if size.X > 90 and size.X < 120 and size.Y > 20 and size.Y < 35 then
+                    print("✅ НАШЁЛ SKIP КНОПКУ!")
+                    print("   Path:", path)
+                    print("   Size:", size.X .. "x" .. size.Y)
+                    print("   Position:", obj.AbsolutePosition.X .. "," .. obj.AbsolutePosition.Y)
+                    print("   Visible:", obj.Visible)
+                    print("   Active:", obj.Active)
+                    return obj
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local skipBtn = findGameSkipButton()
+
+if not skipBtn then
+    print("❌ КНОПКА НЕ НАЙДЕНА!")
+    print("🔍 Все кнопки Button в Items:")
+    
+    for _, obj in pairs(gui:GetDescendants()) do
+        if obj:IsA("GuiButton") and obj.Name == "Button" and obj.Parent and obj.Parent.Name == "Items" then
+            print("   -", obj:GetFullName(), "|", obj.AbsoluteSize.X .. "x" .. obj.AbsoluteSize.Y)
+        end
+    end
+else
+    print("========================================")
+    print("🎯 ТЕСТИРУЮ КЛИК...")
+    print("========================================")
+    
+    -- Пробуем все методы клика
+    local methods = {
+        function()
+            for _, conn in pairs(getconnections(skipBtn.MouseButton1Click)) do
+                conn:Fire()
+            end
+        end,
+        function()
+            for _, conn in pairs(getconnections(skipBtn.Activated)) do
+                conn:Fire()
+            end
+        end,
+        function()
+            firesignal(skipBtn.MouseButton1Click)
+        end,
+        function()
+            local vim = game:GetService("VirtualInputManager")
+            local pos = skipBtn.AbsolutePosition
+            local size = skipBtn.AbsoluteSize
+            vim:SendMouseButtonEvent(pos.X + size.X/2, pos.Y + size.Y/2, 0, true, skipBtn, 0)
+            task.wait(0.05)
+            vim:SendMouseButtonEvent(pos.X + size.X/2, pos.Y + size.Y/2, 0, false, skipBtn, 0)
+        end
+    }
+    
+    for i, method in ipairs(methods) do
+        local ok, err = pcall(method)
+        if ok then
+            print("✅ Метод", i, "- Успешно!")
+        else
+            print("❌ Метод", i, "- Ошибка:", err)
+        end
+        task.wait(1)
+    end
+end
+
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
