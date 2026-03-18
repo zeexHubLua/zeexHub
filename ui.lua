@@ -1576,7 +1576,7 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - НАСТОЯЩАЯ UI НАВИГАЦИЯ
+-- AUTO SKIP - REAL ROBLOX UI NAVIGATION
 -- ==========================================
 
 local GuiService = game:GetService("GuiService")
@@ -1587,18 +1587,6 @@ local gui = player:WaitForChild("PlayerGui")
 
 task.wait(3)
 
--- Включаем режим геймпада (чтобы работала навигация)
-local function enableGamepadMode()
-    pcall(function()
-        -- Включаем GamepadEnabled
-        UserInputService.MouseIconEnabled = false
-        
-        -- Принудительно активируем GUI навигацию
-        GuiService.AutoSelectGuiEnabled = true
-        GuiService.GuiNavigationEnabled = true
-    end)
-end
-
 -- Поиск кнопки Skip
 local function findSkipButton()
     local ok, btn = pcall(function()
@@ -1607,52 +1595,99 @@ local function findSkipButton()
     return ok and btn or nil
 end
 
--- НАСТОЯЩИЙ КЛИК ЧЕРЕЗ UI НАВИГАЦИЮ
-local function navigateAndClick(button)
+-- НАСТРОЙКА НАВИГАЦИИ (как в настоящих играх)
+local function setupNavigation(button)
+    if not button then return false end
+    
+    pcall(function()
+        -- Делаем кнопку видимой для навигации
+        button.Selectable = true
+        button.Active = true
+        
+        -- Устанавливаем как первый элемент навигации
+        -- (это то что делает Роблокс когда ты нажимаешь стрелки)
+        GuiService.SelectedObject = button
+    end)
+    
+    return true
+end
+
+-- РЕАЛЬНАЯ АКТИВАЦИЯ через InputObject
+local function realActivate(button)
     if not button or not button.Parent then return false end
     if not button.Visible then return false end
     
     local success = false
     
     pcall(function()
-        -- Сохраняем предыдущее состояние
-        local previousSelected = GuiService.SelectedObject
-        local previousSelectable = button.Selectable
-        
-        -- Делаем кнопку доступной для навигации
+        -- Настраиваем навигацию
         button.Selectable = true
         button.Active = true
         
-        -- ВЫБИРАЕМ кнопку (это создаст синюю подсветку)
+        -- Выбираем кнопку
         GuiService.SelectedObject = button
         
-        -- Ждём чтобы выбор применился
-        RunService.RenderStepped:Wait()
+        -- Ждём рендер
+        task.wait(0.05)
         
-        -- Теперь АКТИВИРУЕМ выбранный элемент
-        -- Это эквивалент нажатия Enter/Space/ButtonA на выбранном элементе
-        
-        -- Способ 1: Прямая активация выбранного объекта
+        -- Проверяем что кнопка действительно выбрана
         if GuiService.SelectedObject == button then
-            -- Фаерим Activated (это событие которое срабатывает при навигации)
-            for _, connection in pairs(getconnections(button.Activated)) do
-                connection:Fire()
-                success = true
+            
+            -- НАСТОЯЩАЯ АКТИВАЦИЯ - создаём InputObject как будто нажали ButtonA
+            local inputObject = Instance.new("InputObject")
+            
+            -- Вызываем GuiButton.Activated с InputObject
+            -- Это НАСТОЯЩИЙ способ активации через навигацию
+            
+            -- Но так как InputObject нельзя создать напрямую, используем обходной путь:
+            -- Вызываем внутреннее событие SelectionGained -> Activated
+            
+            -- 1. SelectionGained (кнопка получила фокус)
+            local selectionGainedEvent = button.SelectionGained
+            if selectionGainedEvent then
+                for _, conn in pairs(getconnections(selectionGainedEvent)) do
+                    pcall(function() conn:Fire() end)
+                end
+            end
+            
+            task.wait(0.03)
+            
+            -- 2. InputBegan на кнопке (как будто навели и нажали)
+            local inputBeganEvent = button.InputBegan
+            if inputBeganEvent then
+                for _, conn in pairs(getconnections(inputBeganEvent)) do
+                    pcall(function() conn:Fire() end)
+                end
+            end
+            
+            task.wait(0.02)
+            
+            -- 3. Activated (главное событие)
+            local activatedEvent = button.Activated
+            if activatedEvent then
+                for _, conn in pairs(getconnections(activatedEvent)) do
+                    pcall(function() 
+                        conn:Fire() 
+                        success = true
+                    end)
+                end
+            end
+            
+            task.wait(0.02)
+            
+            -- 4. InputEnded
+            local inputEndedEvent = button.InputEnded
+            if inputEndedEvent then
+                for _, conn in pairs(getconnections(inputEndedEvent)) do
+                    pcall(function() conn:Fire() end)
+                end
             end
         end
         
-        -- Способ 2: Симуляция нажатия ButtonA/Return на выбранном объекте
-        for _, connection in pairs(getconnections(button.MouseButton1Click)) do
-            connection:Fire()
-            success = true
-        end
-        
-        -- Ждём перед возвратом
-        task.wait(0.1)
-        
-        -- Возвращаем всё назад
-        GuiService.SelectedObject = previousSelected
-        button.Selectable = previousSelectable
+        -- Убираем выбор
+        task.wait(0.05)
+        GuiService.SelectedObject = nil
+        button.Selectable = false
     end)
     
     return success
@@ -1660,21 +1695,18 @@ end
 
 -- Переменные
 local skipButton = nil
-local lastAction = 0
+local lastTry = 0
 local lastRefresh = 0
 local clickCount = 0
 
-local ACTION_INTERVAL = 0.4
-local REFRESH_INTERVAL = 2.5
-
--- Инициализация
-enableGamepadMode()
+local TRY_INTERVAL = 0.5
+local REFRESH_INTERVAL = 3.0
 
 -- Главный цикл
-local autoSkipConn
-autoSkipConn = RunService.Heartbeat:Connect(function()
+local conn
+conn = RunService.Heartbeat:Connect(function()
     if not toggleStates then
-        autoSkipConn:Disconnect()
+        conn:Disconnect()
         return
     end
     
@@ -1691,25 +1723,25 @@ autoSkipConn = RunService.Heartbeat:Connect(function()
         skipButton = findSkipButton()
     end
     
-    -- Действие
-    if now - lastAction >= ACTION_INTERVAL then
+    -- Попытка активации
+    if now - lastTry >= TRY_INTERVAL then
         if not skipButton or not skipButton.Parent then
             skipButton = findSkipButton()
         end
         
         if skipButton and skipButton.Visible and skipButton.Active then
-            if navigateAndClick(skipButton) then
-                lastAction = now
+            if realActivate(skipButton) then
+                lastTry = now
                 clickCount = clickCount + 1
                 
                 if toggleStates["Notifications"] then
-                    warn(string.format("⏭️ [AUTO SKIP] Click #%d", clickCount))
+                    warn(string.format("⏭️ [SKIP] Navigation click #%d", clickCount))
                 end
             end
         else
             if clickCount > 0 then
                 if toggleStates["Notifications"] then
-                    print(string.format("✅ [AUTO SKIP] Session done (%d clicks)", clickCount))
+                    print(string.format("✅ [SKIP] Done (%d)", clickCount))
                 end
                 clickCount = 0
             end
@@ -1720,26 +1752,16 @@ end)
 -- Респавн
 player.CharacterAdded:Connect(function()
     task.wait(3)
-    enableGamepadMode()
     skipButton = nil
     clickCount = 0
-    lastAction = 0
+    lastTry = 0
     lastRefresh = 0
 end)
 
--- Обновление при добавлении элементов
-gui.DescendantAdded:Connect(function(obj)
-    if obj.Name == "Button" then
-        task.wait(0.3)
-        skipButton = findSkipButton()
-    end
-end)
-
 print("========================================")
-print("✅ AUTO SKIP (TRUE UI NAVIGATION)")
-print("   Method: GuiService.SelectedObject")
-print("   + Activated event")
-print("   Interval:", ACTION_INTERVAL, "sec")
+print("✅ AUTO SKIP (REAL NAVIGATION)")
+print("   Using: SelectionGained -> Activated")
+print("   Interval:", TRY_INTERVAL, "sec")
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
