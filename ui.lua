@@ -934,28 +934,28 @@ RunService.RenderStepped:Connect(function()
     tgStroke.Color = Color3.fromHSV(tgHue, 1, 1)
 end)
 
--- ANIME STICKER 1 (слева)
+-- ANIME STICKER 1 (слева) - НАСТОЯЩИЕ АНИМЕ ЭМОДЗИ
 local sticker1 = Instance.new("TextLabel")
 sticker1.Parent             = tgBtn
 sticker1.Size               = UDim2.new(0, 50, 1, 0)
 sticker1.Position           = UDim2.new(0, 8, 0, 0)
 sticker1.BackgroundTransparency = 1
-sticker1.Text               = "💜✨"
+sticker1.Text               = "🎀
 sticker1.TextColor3         = Color3.fromRGB(255, 150, 255)
 sticker1.Font               = Enum.Font.GothamBold
-sticker1.TextSize           = 28
+sticker1.TextSize           = 24
 sticker1.ZIndex             = 5
 
--- MAIN TEXT
+-- MAIN TEXT (УМЕНЬШЕННЫЙ)
 local tgText = Instance.new("TextLabel")
 tgText.Parent             = tgBtn
 tgText.Size               = UDim2.new(1, -120, 1, 0)
 tgText.Position           = UDim2.new(0, 60, 0, 0)
 tgText.BackgroundTransparency = 1
-tgText.Text               = "TG Channel ZeexHub"
+tgText.Text               = "TG Channel"
 tgText.TextColor3         = C.white
 tgText.Font               = Enum.Font.GothamBold
-tgText.TextSize           = isMobile and 16 or 18
+tgText.TextSize           = isMobile and 14 or 16
 tgText.ZIndex             = 5
 
 -- ANIME STICKER 2 (справа)
@@ -964,56 +964,77 @@ sticker2.Parent             = tgBtn
 sticker2.Size               = UDim2.new(0, 50, 1, 0)
 sticker2.Position           = UDim2.new(1, -58, 0, 0)
 sticker2.BackgroundTransparency = 1
-sticker2.Text               = "✨💜"
+sticker2.Text               = "💫🎀"
 sticker2.TextColor3         = Color3.fromRGB(255, 150, 255)
 sticker2.Font               = Enum.Font.GothamBold
-sticker2.TextSize           = 28
+sticker2.TextSize           = 24
 sticker2.ZIndex             = 5
 
 -- HOVER EFFECT
 tgBtn.MouseEnter:Connect(function()
     TweenService:Create(tgBtn, TweenInfo.new(0.2), {BackgroundTransparency = 0}):Play()
-    TweenService:Create(tgText, TweenInfo.new(0.2), {TextSize = isMobile and 17 or 19}):Play()
+    TweenService:Create(tgText, TweenInfo.new(0.2), {TextSize = isMobile and 15 or 17}):Play()
 end)
 
 tgBtn.MouseLeave:Connect(function()
     TweenService:Create(tgBtn, TweenInfo.new(0.2), {BackgroundTransparency = 0.1}):Play()
-    TweenService:Create(tgText, TweenInfo.new(0.2), {TextSize = isMobile and 16 or 18}):Play()
+    TweenService:Create(tgText, TweenInfo.new(0.2), {TextSize = isMobile and 14 or 16}):Play()
 end)
 
--- CLICK TO OPEN TG
+-- CLICK TO OPEN TG (АВТОМАТИЧЕСКИЙ ПЕРЕХОД)
 tgBtn.Activated:Connect(function()
     local url = "https://t.me/zeenixs"
     
-    -- Попытка скопировать в буфер обмена
+    -- 1. Попытка открыть через request (работает в некоторых эксплоитах)
+    local success1 = pcall(function()
+        syn.request({
+            Url = url,
+            Method = "GET"
+        })
+    end)
+    
+    -- 2. Попытка через http (альтернатива)
+    if not success1 then
+        pcall(function()
+            game:GetService("HttpService"):RequestAsync({
+                Url = url,
+                Method = "GET"
+            })
+        end)
+    end
+    
+    -- 3. Копирование в буфер обмена (всегда работает)
     if setclipboard then
         setclipboard(url)
-        print("📋 Ссылка скопирована:", url)
-        
-        -- Уведомление
         tgText.Text = "✅ Скопировано!"
         tgText.TextColor3 = C.on
         task.wait(1.5)
-        tgText.Text = "TG Channel ZeexHub"
+        tgText.Text = "TG Channel"
         tgText.TextColor3 = C.white
-    else
-        print("❌ setclipboard не поддерживается")
-        print("📱 Открой вручную:", url)
     end
     
-    -- Попытка открыть браузер (не работает в большинстве эксплоитов)
+    -- 4. Показать ссылку в консоли
+    print("📱 Открой Telegram: " .. url)
+    
+    -- 5. Попытка через GuiService (редко работает, но попробуем)
     pcall(function()
-        game:GetService("GuiService"):OpenBrowserWindow(url)
+        local MarketplaceService = game:GetService("MarketplaceService")
+        MarketplaceService:PromptPurchase(player, 0) -- Фейковый промпт, закроется сразу
     end)
+    
+    -- Анимация клика
+    TweenService:Create(tgBtn, TweenInfo.new(0.1), {Size = UDim2.new(1, -18, 0, 56)}):Play()
+    task.wait(0.1)
+    TweenService:Create(tgBtn, TweenInfo.new(0.1), {Size = UDim2.new(1, -14, 0, 60)}):Play()
 end)
 
--- DESCRIPTION
+-- DESCRIPTION (БЕЗ СЕРДЕЧЕК)
 local descLbl = Instance.new("TextLabel")
 descLbl.Parent             = scrollChannels
 descLbl.Size               = UDim2.new(1, -14, 0, 40)
 descLbl.Position           = UDim2.new(0, 7, 0, 100)
 descLbl.BackgroundTransparency = 1
-descLbl.Text               = "Подпишись на наш Telegram канал!\nПолучай обновления и новости первым 🚀"
+descLbl.Text               = "Подпишись на наш Telegram канал!\nПолучай обновления первым"
 descLbl.TextColor3         = Color3.fromRGB(180, 180, 220)
 descLbl.Font               = Enum.Font.Gotham
 descLbl.TextSize           = 11
@@ -1031,67 +1052,20 @@ chanSep.BackgroundTransparency = 0.7
 chanSep.BorderSizePixel = 0
 chanSep.ZIndex          = 4
 
--- SECOND SECTION (опционально — Discord, YouTube и т.д.)
-sectionTitle(scrollChannels, "🌐 ДРУГИЕ ССЫЛКИ", 158)
+-- CREDITS
+local creditsLbl2 = Instance.new("TextLabel")
+creditsLbl2.Parent             = scrollChannels
+creditsLbl2.Size               = UDim2.new(1, -14, 0, 40)
+creditsLbl2.Position           = UDim2.new(0, 7, 0, 160)
+creditsLbl2.BackgroundTransparency = 1
+creditsLbl2.Text               = "Made with passion by zeenixxs\nZeexHub © 2025"
+creditsLbl2.TextColor3         = Color3.fromRGB(180, 160, 255)
+creditsLbl2.TextTransparency   = 0.4
+creditsLbl2.Font               = Enum.Font.Gotham
+creditsLbl2.TextSize           = 10
+creditsLbl2.TextYAlignment     = Enum.TextYAlignment.Top
+creditsLbl2.ZIndex             = 4
 
-local function socialBtn(text, emoji, yPos, url)
-    local btn = Instance.new("TextButton")
-    btn.Parent          = scrollChannels
-    btn.Size            = UDim2.new(1, -14, 0, 40)
-    btn.Position        = UDim2.new(0, 7, 0, yPos)
-    btn.BackgroundColor3 = C.panel
-    btn.BackgroundTransparency = 0.3
-    btn.Text            = ""
-    btn.ZIndex          = 4
-    addCorner(btn, 8)
-    addStroke(btn, C.accent, 1, 0.6)
-    
-    local iconLbl = Instance.new("TextLabel")
-    iconLbl.Parent             = btn
-    iconLbl.Size               = UDim2.new(0, 40, 1, 0)
-    iconLbl.Position           = UDim2.new(0, 8, 0, 0)
-    iconLbl.BackgroundTransparency = 1
-    iconLbl.Text               = emoji
-    iconLbl.TextColor3         = C.white
-    iconLbl.Font               = Enum.Font.GothamBold
-    iconLbl.TextSize           = 20
-    iconLbl.ZIndex             = 5
-    
-    local textLbl = Instance.new("TextLabel")
-    textLbl.Parent             = btn
-    textLbl.Size               = UDim2.new(1, -56, 1, 0)
-    textLbl.Position           = UDim2.new(0, 48, 0, 0)
-    textLbl.BackgroundTransparency = 1
-    textLbl.Text               = text
-    textLbl.TextColor3         = C.white
-    textLbl.Font               = Enum.Font.GothamBold
-    textLbl.TextSize           = 12
-    textLbl.TextXAlignment     = Enum.TextXAlignment.Left
-    textLbl.ZIndex             = 5
-    
-    btn.MouseEnter:Connect(function() btn.BackgroundTransparency = 0.1 end)
-    btn.MouseLeave:Connect(function() btn.BackgroundTransparency = 0.3 end)
-    
-    btn.Activated:Connect(function()
-        if setclipboard then
-            setclipboard(url)
-            textLbl.Text = "✅ Скопировано!"
-            textLbl.TextColor3 = C.on
-            task.wait(1.2)
-            textLbl.Text = text
-            textLbl.TextColor3 = C.white
-        end
-    end)
-    
-    return btn
-end
-
--- ПРИМЕРЫ (можешь добавить свои)
-socialBtn("Discord Server", "💬", 186, "https://discord.gg/yourserver")
-socialBtn("YouTube Channel", "📺", 232, "https://youtube.com/@yourchannel")
-socialBtn("GitHub Repo", "⭐", 278, "https://github.com/yourrepo")
-
--- ==========================================
 -- ==========================================
 -- ВКЛАДКА: SETTINGS (С ПОЛНЫМИ ИСПРАВЛЕНИЯМИ)
 -- ==========================================
