@@ -1576,93 +1576,120 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - ЧЕРЕЗ UI NAVIGATION РОБЛОКСА
+-- AUTO SKIP - GAMEPAD NAVIGATION (СТРЕЛКИ)
 -- ==========================================
 
 local GuiService = game:GetService("GuiService")
 local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local RunService = game:GetService("RunService")
 local player = game:GetService("Players").LocalPlayer
 local gui = player:WaitForChild("PlayerGui")
 
 task.wait(3)
 
--- Поиск кнопки (точный путь)
+-- Поиск кнопки
 local function findSkipButton()
-    pcall(function()
+    local ok, btn = pcall(function()
         return gui.GameGui.Screen.Middle.SandboxMenu.SandboxMenu.Frame.Items.Items.Waves.GoToWave.Items.Items.Button
     end)
-    
-    local path = "GameGui.Screen.Middle.SandboxMenu.SandboxMenu.Frame.Items.Items.Waves.GoToWave.Items.Items.Button"
-    local parts = string.split(path, ".")
-    local current = gui
-    
-    for _, part in ipairs(parts) do
-        current = current:FindFirstChild(part)
-        if not current then return nil end
-    end
-    
-    return current
+    return ok and btn or nil
 end
 
--- КЛИК ЧЕРЕЗ UI NAVIGATION (как стрелками)
-local function clickViaUINavigation(button)
+-- ПРАВИЛЬНЫЙ КЛИК ЧЕРЕЗ GAMEPAD NAVIGATION
+local function clickViaGamepadNav(button)
     if not button or not button.Parent then return false end
     if not button.Visible then return false end
     
     local success = false
     
-    -- Сохраняем текущий выбранный объект
-    local previousSelected = GuiService.SelectedObject
-    
     pcall(function()
-        -- Делаем кнопку активной для выбора
+        -- Сохраняем предыдущий выбор
+        local prevSelected = GuiService.SelectedObject
+        
+        -- Включаем геймпад режим (чтобы работала навигация стрелками)
+        local wasGamepadEnabled = UserInputService.GamepadEnabled
+        
+        -- Делаем кнопку выбираемой
         button.Selectable = true
         button.Active = true
         
-        -- ВЫБИРАЕМ кнопку (как стрелками)
+        -- ВЫБИРАЕМ кнопку (появится СИНЯЯ подсветка)
         GuiService.SelectedObject = button
         
-        task.wait(0.08)
+        task.wait(0.1)
         
-        -- Симулируем нажатие ENTER/SPACE на выбранном элементе
-        -- Это то же самое что нажать кнопку через геймпад/клавиатуру
+        -- Симулируем нажатие ButtonA (как на геймпаде) или Enter
+        -- Это активирует выбранную кнопку
         
-        -- Метод 1: InputBegan + InputEnded (симуляция кнопки)
-        local inputObj = Instance.new("InputObject")
+        -- Способ 1: Через VirtualInputManager (симуляция клавиши)
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+        task.wait(0.05)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
         
-        -- Используем ButtonA (как на геймпаде) или Space
-        UserInputService:GetPropertyChangedSignal("SelectedObject"):Wait()
+        success = true
         
-        -- Фаерим событие активации
+        task.wait(0.1)
+        
+        -- Возвращаем всё как было
+        GuiService.SelectedObject = prevSelected
+        button.Selectable = false
+    end)
+    
+    return success
+end
+
+-- АЛЬТЕРНАТИВНЫЙ СПОСОБ - прямая активация
+local function directActivate(button)
+    if not button or not button.Parent then return false end
+    if not button.Visible then return false end
+    
+    local success = false
+    
+    -- Делаем кнопку выбранной
+    pcall(function()
+        local prev = GuiService.SelectedObject
+        
+        button.Selectable = true
+        GuiService.SelectedObject = button
+        
+        task.wait(0.05)
+        
+        -- Фаерим ВСЕ события активации
         for _, conn in pairs(getconnections(button.Activated)) do
             conn:Fire()
+            success = true
         end
         
-        -- Фаерим MouseButton1Click
         for _, conn in pairs(getconnections(button.MouseButton1Click)) do
             conn:Fire()
+            success = true
         end
         
-        -- Фаерим MouseButton1Down -> Up
+        -- MouseButton1Down + Up
         for _, conn in pairs(getconnections(button.MouseButton1Down)) do
             conn:Fire()
         end
-        task.wait(0.05)
+        task.wait(0.03)
         for _, conn in pairs(getconnections(button.MouseButton1Up)) do
             conn:Fire()
         end
         
-        success = true
-    end)
-    
-    -- Возвращаем предыдущий выбор
-    task.wait(0.1)
-    pcall(function()
-        GuiService.SelectedObject = previousSelected
+        task.wait(0.05)
+        GuiService.SelectedObject = prev
         button.Selectable = false
     end)
     
+    return success
+end
+
+-- КОМБО - пробуем оба способа
+local function smartClick(button)
+    local success = clickViaGamepadNav(button)
+    if not success then
+        task.wait(0.1)
+        success = directActivate(button)
+    end
     return success
 end
 
@@ -1670,8 +1697,9 @@ end
 local skipButton = nil
 local lastClick = 0
 local lastRefresh = 0
-local CLICK_INTERVAL = 0.7
-local REFRESH_INTERVAL = 4.0
+local clickCount = 0
+local CLICK_INTERVAL = 0.5
+local REFRESH_INTERVAL = 3.0
 
 -- Главный цикл
 local autoSkipConn
@@ -1681,17 +1709,24 @@ autoSkipConn = RunService.Heartbeat:Connect(function()
         return
     end
     
-    if not toggleStates["Auto Skip"] then return end
+    if not toggleStates["Auto Skip"] then 
+        clickCount = 0
+        return 
+    end
     
     local now = tick()
     
     -- Обновление кнопки
     if now - lastRefresh >= REFRESH_INTERVAL then
         lastRefresh = now
+        local oldBtn = skipButton
         skipButton = findSkipButton()
         
-        if skipButton and toggleStates["Notifications"] then
-            print("🔄 [AUTO SKIP] Button refreshed")
+        if skipButton ~= oldBtn then
+            clickCount = 0
+            if toggleStates["Notifications"] then
+                print("🔄 [AUTO SKIP] Button found/refreshed")
+            end
         end
     end
     
@@ -1702,11 +1737,20 @@ autoSkipConn = RunService.Heartbeat:Connect(function()
         end
         
         if skipButton and skipButton.Visible and skipButton.Active then
-            if clickViaUINavigation(skipButton) then
+            if smartClick(skipButton) then
                 lastClick = now
+                clickCount = clickCount + 1
+                
                 if toggleStates["Notifications"] then
-                    warn("⏭️ [AUTO SKIP] Clicked via UI Navigation!")
+                    warn("⏭️ [AUTO SKIP] Click #" .. clickCount .. " (Gamepad Nav)")
                 end
+            end
+        else
+            if clickCount > 0 then
+                if toggleStates["Notifications"] then
+                    print("✅ [AUTO SKIP] Completed (" .. clickCount .. " clicks)")
+                end
+                clickCount = 0
             end
         end
     end
@@ -1718,20 +1762,22 @@ player.CharacterAdded:Connect(function()
     skipButton = findSkipButton()
     lastClick = 0
     lastRefresh = 0
+    clickCount = 0
 end)
 
--- При изменении GUI
+-- Обновление при изменении GUI
 gui.DescendantAdded:Connect(function(obj)
-    if obj.Name == "Button" then
+    if obj.Name == "Button" or obj.Name == "Items" then
         task.wait(0.5)
         skipButton = findSkipButton()
     end
 end)
 
 print("========================================")
-print("✅ AUTO SKIP (UI NAVIGATION MODE)")
-print("   Method: GuiService.SelectedObject")
-print("   Like pressing arrows + Enter")
+print("✅ AUTO SKIP (GAMEPAD NAVIGATION)")
+print("   Метод: GuiService.SelectedObject")
+print("   Активация: VirtualInputManager (Enter)")
+print("   Интервал:", CLICK_INTERVAL, "сек")
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
