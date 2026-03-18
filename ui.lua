@@ -233,6 +233,11 @@ UserInputService.InputChanged:Connect(function(inp)
             drag.fpos.X.Scale, drag.fpos.X.Offset + d.X,
             drag.fpos.Y.Scale, drag.fpos.Y.Offset + d.Y
         )
+        
+        -- ДОБАВЬ ЭТИ СТРОКИ:
+        if macroDD.Visible then
+            macroDD.Position = UDim2.new(0, mainFrame.AbsolutePosition.X + CONTENT_X + 100, 0, mainFrame.AbsolutePosition.Y + CONTENT_Y + 117)
+        end
     end
 end)
 
@@ -625,13 +630,13 @@ macroSelBtn.MouseLeave:Connect(function() macroSelBtn.BackgroundTransparency = 0
 
 -- MACRO DROPDOWN
 local macroDD = Instance.new("ScrollingFrame")
-macroDD.Parent               = scrollMacro
-macroDD.Size                 = UDim2.new(1,-104,0,0)
-macroDD.Position             = UDim2.new(0,100,0,117)
+macroDD.Parent               = screenGui  -- ← ИЗМЕНЕНО: было scrollMacro
+macroDD.Size                 = UDim2.new(0, CONTENT_W - 104, 0, 0)
+macroDD.Position             = UDim2.new(0, mainFrame.AbsolutePosition.X + CONTENT_X + 100, 0, mainFrame.AbsolutePosition.Y + CONTENT_Y + 117)
 macroDD.BackgroundColor3     = C.bg
 macroDD.BackgroundTransparency = 0.05
 macroDD.Visible              = false
-macroDD.ZIndex               = 45
+macroDD.ZIndex               = 100  -- ← ИЗМЕНЕНО: было 45
 macroDD.ScrollBarThickness   = 3
 macroDD.ScrollBarImageColor3 = C.accent
 macroDD.BorderSizePixel      = 0
