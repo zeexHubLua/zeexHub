@@ -310,7 +310,7 @@ local function navBtn(text, yPos)
     b.TextColor3      = C.white
     b.Font            = Enum.Font.GothamBold
     b.TextSize        = isMobile and 9 or 11
-    b.ZIndex          = 3
+    b.ZIndex          = 50
     addCorner(b, 6)
     b.MouseEnter:Connect(function() b.BackgroundColor3 = C.btnHover end)
     b.MouseLeave:Connect(function() b.BackgroundColor3 = C.btn      end)
