@@ -1575,6 +1575,107 @@ toggleSetters["AutoSave"](true, true)
 toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
+-- ==========================================
+-- AUTO SKIP - ПРАВИЛЬНАЯ ВЕРСИЯ
+-- ==========================================
+
+local GuiService = game:GetService("GuiService")
+local RunService = game:GetService("RunService")
+
+task.wait(3) -- Ждём загрузки GUI
+
+-- Поиск кнопки Auto Skip в твоём UI
+local function findAutoSkipToggle()
+    for _, obj in pairs(screenGui:GetDescendants()) do
+        if obj:IsA("TextLabel") and obj.Text == "Auto Skip" then
+            local parent = obj.Parent
+            if parent then
+                -- Ищем трек (Frame с кнопкой On/Off)
+                for _, child in pairs(parent:GetDescendants()) do
+                    if child:IsA("TextButton") and child.Name == "" then
+                        return child
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- Функция клика через UI Navigation
+local function clickViaNavigation(button)
+    if not button or not button.Parent then return false end
+    if not button.Visible or not button.Active then return false end
+    
+    local success = false
+    
+    -- Сохраняем текущий выбор
+    local prevSelected = GuiService.SelectedObject
+    
+    pcall(function()
+        -- Выбираем кнопку
+        GuiService.SelectedObject = button
+        task.wait(0.05)
+        
+        -- Активируем все события
+        for _, conn in pairs(getconnections(button.Activated)) do
+            conn:Fire()
+            success = true
+        end
+        
+        for _, conn in pairs(getconnections(button.MouseButton1Click)) do
+            conn:Fire()
+            success = true
+        end
+        
+        task.wait(0.05)
+        
+        -- Возвращаем выбор
+        GuiService.SelectedObject = prevSelected
+    end)
+    
+    return success
+end
+
+-- Таймер
+local lastCheck = 0
+local CHECK_INTERVAL = 1.5
+
+-- Основной цикл
+RunService.Heartbeat:Connect(function()
+    if not toggleStates then return end
+    if not toggleStates["Auto Skip"] then return end
+    
+    local now = tick()
+    if now - lastCheck < CHECK_INTERVAL then return end
+    lastCheck = now
+    
+    -- Ищем кнопку
+    local skipToggle = findAutoSkipToggle()
+    
+    if skipToggle then
+        -- Проверяем состояние по позиции knob
+        local track = skipToggle.Parent
+        if track and track:IsA("Frame") then
+            local knob = track:FindFirstChildOfClass("Frame")
+            if knob then
+                -- Если knob слева (Position.X.Offset < 10) = OFF
+                if knob.Position.X.Offset < 10 then
+                    if clickViaNavigation(skipToggle) then
+                        if toggleStates["Notifications"] then
+                            warn("⏭️ [AUTO SKIP] Включён!")
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+print("========================================")
+print("✅ AUTO SKIP LOADED (UI NAVIGATION)")
+print("========================================")
+
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
 print("⚡ by zeenixxs")
 print("📋 Configs:", #configs, "| 📄 Macros:", #macros)
