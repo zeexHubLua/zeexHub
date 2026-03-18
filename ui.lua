@@ -1,749 +1,1330 @@
--- Фиксы:
--- 1. Добавлена кнопка Delete для удаления конфигов
--- 2. Исправлен баг с выбором только одного конфига
--- 3. Улучшены размеры для мобильных устройств
--- 4. Оптимизирован UI для телефонов
+-- ==========================================
+-- ZEEXHUB UI - ФИНАЛЬНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ
+-- ==========================================
 
+local Players          = game:GetService("Players")
+local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+local RunService       = game:GetService("RunService")
+local HttpService      = game:GetService("HttpService")
 
--- Адаптивные размеры
-local WINDOW_SIZE = isMobile and UDim2.new(0, 360, 0, 500) or UDim2.new(0, 500, 0, 310)
-local PADDING = isMobile and 6 or 8
-local BUTTON_HEIGHT = isMobile and 32 or 28
-local FONT_SIZE = isMobile and 14 or 13
+local player   = Players.LocalPlayer
+local isMobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
 
-local sg = Instance.new("ScreenGui")
-sg.Name = "ModernHubV3"
-sg.ResetOnSpawn = false
-sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-sg.Parent = game.CoreGui
+-- ==========================================
+-- КОНСТАНТЫ РАЗМЕРОВ
+-- ==========================================
+local W          = isMobile and 360  or 500
+local H          = isMobile and 500  or 310
+local TITLE_H    = isMobile and 40   or 34
+local FOOTER_H   = 16
+local BTN_SZ     = isMobile and 34   or 24
+local LEFT_W     = isMobile and 80   or 82
+local CONTENT_X  = LEFT_W + 8
+local CONTENT_Y  = TITLE_H + 4
+local CONTENT_H  = H - CONTENT_Y - FOOTER_H - 6
+local CONTENT_W  = W - CONTENT_X - 6
 
-local main = Instance.new("Frame")
-main.Name = "Main"
-main.Size = WINDOW_SIZE
-main.Position = UDim2.new(0.5, 0, 0.5, 0)
-main.AnchorPoint = Vector2.new(0.5, 0.5)
-main.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
-main.BorderSizePixel = 0
-main.ClipsDescendants = true
-main.ZIndex = 1
-main.Parent = sg
+-- ==========================================
+-- ЦВЕТА
+-- ==========================================
+local C = {
+    bg       = Color3.fromRGB(15,  0,  25),
+    panel    = Color3.fromRGB(25,  0,  40),
+    btn      = Color3.fromRGB(80,  0, 130),
+    btnHover = Color3.fromRGB(120, 0, 180),
+    accent   = Color3.fromRGB(160, 0, 255),
+    on       = Color3.fromRGB(0,  220,  85),
+    off      = Color3.fromRGB(100,100, 100),
+    track    = Color3.fromRGB(40,  40,  40),
+    trackOn  = Color3.fromRGB(0,  130,  40),
+    white    = Color3.fromRGB(255,255, 255),
+    danger   = Color3.fromRGB(220, 50, 60),
+    dim      = Color3.fromRGB(160,160, 160),
+}
 
-local uic1 = Instance.new("UICorner")
-uic1.CornerRadius = UDim.new(0, isMobile and 12 : 16)
-uic1.Parent = main
+-- ==========================================
+-- СОСТОЯНИЯ
+-- ==========================================
+local toggleStates  = {}   -- [key] = bool
+local toggleSetters = {}   -- [key] = function(bool, silent?)
+local configs       = {}
+local macros        = {}
+local selectedConfig = nil
+local selectedMacro  = nil
+local selectedWave   = "Easy"
+local isPlaying      = false
+local isRecording    = false
+local loopMode       = false
+local useHotkey      = false
 
-local topbar = Instance.new("Frame")
-topbar.Name = "TopBar"
-topbar.Size = UDim2.new(1, 0, 0, isMobile and 40 : 36)
-topbar.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
-topbar.BorderSizePixel = 0
-topbar.ZIndex = 2
-topbar.Parent = main
+-- ==========================================
+-- ФАЙЛЫ
+-- ==========================================
+local function tryRead(file)
+    if not (isfile and readfile) then return nil end
+    local ok, data = pcall(function()
+        if isfile(file) then return readfile(file) end
+    end)
+    return ok and data or nil
+end
 
-local uic2 = Instance.new("UICorner")
-uic2.CornerRadius = UDim.new(0, isMobile and 12 : 16)
-uic2.Parent = topbar
+local function tryWrite(file, data)
+    if not (writefile) then return end
+    pcall(writefile, file, data)
+end
 
-local cover = Instance.new("Frame")
-cover.Name = "Cover"
-cover.Size = UDim2.new(1, 0, 0, isMobile and 12 : 16)
-cover.Position = UDim2.new(0, 0, 1, isMobile and -12 : -16)
-cover.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
-cover.BorderSizePixel = 0
-cover.ZIndex = 2
-cover.Parent = topbar
+local function saveMacros()
+    if #macros > 0 then
+        tryWrite("zeexhub_macros.json", HttpService:JSONEncode(macros))
+    end
+end
 
-local title = Instance.new("TextLabel")
-title.Name = "Title"
-title.Size = UDim2.new(1, isMobile and -80 : -70, 1, 0)
-title.Position = UDim2.new(0, isMobile and 12 : 10, 0, 0)
-title.BackgroundTransparency = 1
-title.Text = "Modern Hub"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.Font = Enum.Font.GothamBold
-title.TextSize = isMobile and 16 : 15
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.ZIndex = 3
-title.Parent = topbar
+local function loadMacros()
+    local d = tryRead("zeexhub_macros.json")
+    if d and #d > 2 then
+        local ok, t = pcall(HttpService.JSONDecode, HttpService, d)
+        if ok and type(t) == "table" then macros = t end
+    end
+end
 
-local minimize = Instance.new("TextButton")
-minimize.Name = "Minimize"
-minimize.Size = UDim2.new(0, isMobile and 34 : 30, 0, isMobile and 34 : 30)
-minimize.Position = UDim2.new(1, isMobile and -70 : -60, 0.5, 0)
-minimize.AnchorPoint = Vector2.new(0, 0.5)
-minimize.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
-minimize.BorderSizePixel = 0
-minimize.Text = "−"
-minimize.TextColor3 = Color3.fromRGB(200, 200, 210)
-minimize.Font = Enum.Font.GothamBold
-minimize.TextSize = isMobile and 20 : 18
-minimize.ZIndex = 10
-minimize.Parent = topbar
+local function saveConfigs()
+    tryWrite("zeexhub_configs.json", HttpService:JSONEncode(configs))
+end
 
-local uic3 = Instance.new("UICorner")
-uic3.CornerRadius = UDim.new(0, isMobile and 8 : 6)
-uic3.Parent = minimize
+local function loadConfigs()
+    local d = tryRead("zeexhub_configs.json")
+    if d and #d > 2 then
+        local ok, t = pcall(HttpService.JSONDecode, HttpService, d)
+        if ok and type(t) == "table" then configs = t end
+    end
+end
 
-local close = Instance.new("TextButton")
-close.Name = "Close"
-close.Size = UDim2.new(0, isMobile and 34 : 30, 0, isMobile and 34 : 30)
-close.Position = UDim2.new(1, isMobile and -32 : -28, 0.5, 0)
-close.AnchorPoint = Vector2.new(0, 0.5)
-close.BackgroundColor3 = Color3.fromRGB(220, 50, 60)
-close.BorderSizePixel = 0
-close.Text = "✕"
-close.TextColor3 = Color3.fromRGB(255, 255, 255)
-close.Font = Enum.Font.GothamBold
-close.TextSize = isMobile and 18 : 16
-close.ZIndex = 10
-close.Parent = topbar
+-- ==========================================
+-- HELPERS
+-- ==========================================
+local function addCorner(parent, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius or 8)
+    c.Parent = parent
+    return c
+end
 
-local uic4 = Instance.new("UICorner")
-uic4.CornerRadius = UDim.new(0, isMobile and 8 : 6)
-uic4.Parent = close
+local function addStroke(parent, color, thickness, transparency)
+    local s = Instance.new("UIStroke")
+    s.Parent       = parent
+    s.Color        = color or C.accent
+    s.Thickness    = thickness or 2
+    s.Transparency = transparency or 0
+    return s
+end
 
-local tabContainer = Instance.new("Frame")
-tabContainer.Name = "TabContainer"
-tabContainer.Size = UDim2.new(0, isMobile and 80 : 100, 1, isMobile and -46 : -42)
-tabContainer.Position = UDim2.new(0, PADDING, 0, (isMobile and 40 : 36) + PADDING/2)
-tabContainer.BackgroundTransparency = 1
-tabContainer.ZIndex = 2
-tabContainer.Parent = main
+-- ==========================================
+-- SCREEN GUI
+-- ==========================================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name           = "ZeexHub"
+screenGui.Parent         = player:WaitForChild("PlayerGui")
+screenGui.ResetOnSpawn   = false
+screenGui.IgnoreGuiInset = true
+screenGui.DisplayOrder   = 999
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-local contentFrame = Instance.new("Frame")
-contentFrame.Name = "ContentFrame"
-contentFrame.Size = UDim2.new(1, isMobile and -96 : -116, 1, isMobile and -52 : -50)
-contentFrame.Position = UDim2.new(0, (isMobile and 80 : 100) + PADDING*2, 0, (isMobile and 40 : 36) + PADDING)
-contentFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
-contentFrame.BorderSizePixel = 0
-contentFrame.ClipsDescendants = true
-contentFrame.ZIndex = 2
-contentFrame.Parent = main
+-- ==========================================
+-- MAIN FRAME — ФИКСИРОВАННЫЙ ПРЯМОУГОЛЬНИК
+-- ==========================================
+local mainFrame = Instance.new("Frame")
+mainFrame.Parent               = screenGui
+mainFrame.BackgroundColor3     = C.bg
+mainFrame.BackgroundTransparency = 0.05
+mainFrame.Size                 = UDim2.new(0, W, 0, H)
+mainFrame.Position             = UDim2.new(0.5, -W/2, 0.5, -H/2)
+mainFrame.Active               = true
+mainFrame.ClipsDescendants     = true
+addCorner(mainFrame, 14)
 
-local uic5 = Instance.new("UICorner")
-uic5.CornerRadius = UDim.new(0, isMobile and 10 : 12)
-uic5.Parent = contentFrame
-
-local tabs = {}
-local currentTab = nil
-local toggleStates = {}
-local toggleSetters = {}
-local configList = {}
-
-close.Activated:Connect(function()
-    sg:Destroy()
+local rgbStroke = addStroke(mainFrame, C.accent, 3)
+local hue = 0
+RunService.RenderStepped:Connect(function()
+    hue = (hue + 0.005) % 1
+    rgbStroke.Color = Color3.fromHSV(hue, 1, 1)
 end)
 
-local minimized = false
-minimize.Activated:Connect(function()
-    minimized = not minimized
-    local targetSize = minimized and UDim2.new(0, WINDOW_SIZE.X.Offset, 0, isMobile and 40 : 36) or WINDOW_SIZE
-    TweenService:Create(main, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {Size = targetSize}):Play()
-    minimize.Text = minimized and "+" or "−"
-end)
+-- ==========================================
+-- TITLE BAR
+-- ==========================================
+local titleBar = Instance.new("Frame")
+titleBar.Parent               = mainFrame
+titleBar.BackgroundColor3     = C.panel
+titleBar.BackgroundTransparency = 0.1
+titleBar.Size                 = UDim2.new(1, 0, 0, TITLE_H)
+titleBar.ZIndex               = 2
+titleBar.Active               = true
+addCorner(titleBar, 14)
 
-local dragging, dragInput, startPos
-topbar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        startPos = main.Position
-        local startInputPos = input.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
+local titleLbl = Instance.new("TextLabel")
+titleLbl.Parent             = titleBar
+titleLbl.Size               = UDim2.new(0, 180, 1, 0)
+titleLbl.Position           = UDim2.new(0, 10, 0, 0)
+titleLbl.BackgroundTransparency = 1
+titleLbl.Text               = "⚡ ZEEXHUB"
+titleLbl.TextColor3         = C.white
+titleLbl.Font               = Enum.Font.GothamBold
+titleLbl.TextSize           = isMobile and 14 or 15
+titleLbl.TextXAlignment     = Enum.TextXAlignment.Left
+titleLbl.ZIndex             = 3
+
+local authorLbl = Instance.new("TextLabel")
+authorLbl.Parent             = titleBar
+authorLbl.Size               = UDim2.new(0, 100, 1, 0)
+authorLbl.Position           = UDim2.new(1, -(BTN_SZ*2 + 18 + 100), 0, 0)
+authorLbl.BackgroundTransparency = 1
+authorLbl.Text               = "by: zeenixxs"
+authorLbl.TextColor3         = Color3.fromRGB(180, 180, 255)
+authorLbl.Font               = Enum.Font.GothamBold
+authorLbl.TextSize           = 10
+authorLbl.TextTransparency   = 0.3
+authorLbl.TextXAlignment     = Enum.TextXAlignment.Right
+authorLbl.ZIndex             = 3
+
+-- HIDE / CLOSE КНОПКИ (ZIndex = 10 — поверх всего в titleBar)
+local function makeTitleBtn(text, xOff, bg)
+    local b = Instance.new("TextButton")
+    b.Parent          = titleBar
+    b.Size            = UDim2.new(0, BTN_SZ, 0, BTN_SZ)
+    b.Position        = UDim2.new(1, xOff, 0.5, -BTN_SZ/2)
+    b.BackgroundColor3 = bg
+    b.Text            = text
+    b.TextColor3      = C.white
+    b.Font            = Enum.Font.GothamBold
+    b.TextSize        = isMobile and 20 or 15
+    b.ZIndex          = 10
+    addCorner(b, 6)
+    return b
+end
+
+local hideBtn  = makeTitleBtn("−", -(BTN_SZ*2 + 10), C.btn)
+local closeBtn = makeTitleBtn("✕", -(BTN_SZ   +  5), C.danger)
+
+-- DRAGGING
+local drag = {on=false, input=nil, mpos=nil, fpos=nil}
+
+titleBar.InputBegan:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.MouseButton1
+    or inp.UserInputType == Enum.UserInputType.Touch then
+        drag.on   = true
+        drag.mpos = inp.Position
+        drag.fpos = mainFrame.Position
+        inp.Changed:Connect(function()
+            if inp.UserInputState == Enum.UserInputState.End then drag.on = false end
         end)
     end
 end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local delta = input.Position - (dragInput or input.Position)
-        main.Position = UDim2.new(
-            startPos.X.Scale, startPos.X.Offset + delta.X,
-            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+titleBar.InputChanged:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.MouseMovement
+    or inp.UserInputType == Enum.UserInputType.Touch then
+        drag.input = inp
+    end
+end)
+UserInputService.InputChanged:Connect(function(inp)
+    if inp == drag.input and drag.on then
+        local d = inp.Position - drag.mpos
+        mainFrame.Position = UDim2.new(
+            drag.fpos.X.Scale, drag.fpos.X.Offset + d.X,
+            drag.fpos.Y.Scale, drag.fpos.Y.Offset + d.Y
         )
     end
 end)
 
-local library = {}
+-- TAB BUTTON (когда окно свёрнуто)
+local tabBtn = Instance.new("TextButton")
+tabBtn.Parent          = screenGui
+tabBtn.Size            = UDim2.new(0, 44, 0, 44)
+tabBtn.Position        = UDim2.new(1, -54, 0.5, -22)
+tabBtn.BackgroundColor3 = C.accent
+tabBtn.Text            = "⚡"
+tabBtn.TextColor3      = C.white
+tabBtn.Font            = Enum.Font.GothamBold
+tabBtn.TextSize        = 22
+tabBtn.Visible         = false
+tabBtn.ZIndex          = 100
+addCorner(tabBtn, 10)
 
-function library:CreateTab(name, icon)
-    local tabButton = Instance.new("TextButton")
-    tabButton.Name = name
-    tabButton.Size = UDim2.new(1, 0, 0, isMobile and 42 : 38)
-    tabButton.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
-    tabButton.BorderSizePixel = 0
-    tabButton.Text = ""
-    tabButton.AutoButtonColor = false
-    tabButton.ZIndex = 3
-    tabButton.Parent = tabContainer
+hideBtn.Activated:Connect(function()
+    mainFrame.Visible = false
+    tabBtn.Visible    = true
+end)
+tabBtn.Activated:Connect(function()
+    mainFrame.Visible = true
+    tabBtn.Visible    = false
+end)
+closeBtn.Activated:Connect(function()
+    screenGui:Destroy()
+end)
 
-    local uic = Instance.new("UICorner")
-    uic.CornerRadius = UDim.new(0, isMobile and 8 : 10)
-    uic.Parent = tabButton
+-- HOTKEY FLOATING BUTTON
+local hotkeyBtn = Instance.new("TextButton")
+hotkeyBtn.Parent          = screenGui
+hotkeyBtn.Size            = UDim2.new(0, 48, 0, 48)
+hotkeyBtn.Position        = UDim2.new(1, -62, 0, 54)
+hotkeyBtn.BackgroundColor3 = C.on
+hotkeyBtn.Text            = "▶"
+hotkeyBtn.TextColor3      = C.white
+hotkeyBtn.Font            = Enum.Font.GothamBold
+hotkeyBtn.TextSize        = 22
+hotkeyBtn.Visible         = false
+hotkeyBtn.ZIndex          = 100
+addCorner(hotkeyBtn, 10)
 
-    local iconLabel = Instance.new("TextLabel")
-    iconLabel.Name = "Icon"
-    iconLabel.Size = UDim2.new(1, 0, 0.5, 0)
-    iconLabel.Position = UDim2.new(0, 0, 0, isMobile and 4 : 2)
-    iconLabel.BackgroundTransparency = 1
-    iconLabel.Text = icon or "📋"
-    iconLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
-    iconLabel.Font = Enum.Font.Gotham
-    iconLabel.TextSize = isMobile and 18 : 16
-    iconLabel.ZIndex = 4
-    iconLabel.Parent = tabButton
+hotkeyBtn.Activated:Connect(function()
+    isPlaying = not isPlaying
+    hotkeyBtn.BackgroundColor3 = isPlaying and Color3.fromRGB(220,40,40) or C.on
+    hotkeyBtn.Text             = isPlaying and "⏸" or "▶"
+end)
 
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Name = "Name"
-    nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
-    nameLabel.Position = UDim2.new(0, 0, 0.5, isMobile and -2 : 0)
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.Text = name
-    nameLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
-    nameLabel.Font = Enum.Font.Gotham
-    nameLabel.TextSize = isMobile and 11 : 9
-    nameLabel.ZIndex = 4
-    nameLabel.Parent = tabButton
+-- ==========================================
+-- LEFT PANEL
+-- ==========================================
+local leftPanel = Instance.new("Frame")
+leftPanel.Parent               = mainFrame
+leftPanel.Size                 = UDim2.new(0, LEFT_W, 0, CONTENT_H)
+leftPanel.Position             = UDim2.new(0, 4, 0, CONTENT_Y)
+leftPanel.BackgroundColor3     = C.panel
+leftPanel.BackgroundTransparency = 0.2
+leftPanel.ZIndex               = 2
+addCorner(leftPanel, 10)
+addStroke(leftPanel, C.accent, 2)
 
-    local scrollFrame = Instance.new("ScrollingFrame")
-    scrollFrame.Name = name .. "Content"
-    scrollFrame.Size = UDim2.new(1, -PADDING*2, 1, -PADDING*2)
-    scrollFrame.Position = UDim2.new(0, PADDING, 0, PADDING)
-    scrollFrame.BackgroundTransparency = 1
-    scrollFrame.BorderSizePixel = 0
-    scrollFrame.ScrollBarThickness = isMobile and 4 : 3
-    scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(90, 90, 100)
-    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-    scrollFrame.Visible = false
-    scrollFrame.ZIndex = 3
-    scrollFrame.Parent = contentFrame
-
-    local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0, PADDING)
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Parent = scrollFrame
-
-    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        scrollFrame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + PADDING)
-    end)
-
-    tabs[name] = {button = tabButton, content = scrollFrame}
-
-    local function selectTab()
-        for _, t in pairs(tabs) do
-            t.button.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
-            t.button.Icon.TextColor3 = Color3.fromRGB(180, 180, 190)
-            t.button.Name.TextColor3 = Color3.fromRGB(180, 180, 190)
-            t.content.Visible = false
-        end
-        tabButton.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-        iconLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        scrollFrame.Visible = true
-        currentTab = name
-    end
-
-    tabButton.Activated:Connect(selectTab)
-
-    if not currentTab then
-        selectTab()
-    end
-
-    local tabFuncs = {}
-
-    function tabFuncs:AddToggle(opts)
-        local key = opts.key or opts.text
-        local state = opts.default or false
-        toggleStates[key] = state
-
-        local holder = Instance.new("Frame")
-        holder.Size = UDim2.new(1, 0, 0, BUTTON_HEIGHT)
-        holder.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
-        holder.BorderSizePixel = 0
-        holder.ZIndex = 4
-        holder.Parent = scrollFrame
-
-        local uic = Instance.new("UICorner")
-        uic.CornerRadius = UDim.new(0, isMobile and 7 : 8)
-        uic.Parent = holder
-
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, isMobile and -50 : -60, 1, 0)
-        label.Position = UDim2.new(0, isMobile and 8 : 10, 0, 0)
-        label.BackgroundTransparency = 1
-        label.Text = opts.text
-        label.TextColor3 = Color3.fromRGB(220, 220, 230)
-        label.Font = Enum.Font.Gotham
-        label.TextSize = FONT_SIZE
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.ZIndex = 5
-        label.Parent = holder
-
-        local switch = Instance.new("Frame")
-        switch.Name = "Switch"
-        switch.Size = UDim2.new(0, isMobile and 42 : 38, 0, isMobile and 20 : 18)
-        switch.Position = UDim2.new(1, isMobile and -46 : -42, 0.5, 0)
-        switch.AnchorPoint = Vector2.new(0, 0.5)
-        switch.BackgroundColor3 = state and Color3.fromRGB(88, 101, 242) or Color3.fromRGB(50, 50, 58)
-        switch.BorderSizePixel = 0
-        switch.ZIndex = 5
-        switch.Parent = holder
-
-        local uic2 = Instance.new("UICorner")
-        uic2.CornerRadius = UDim.new(1, 0)
-        uic2.Parent = switch
-
-        local knob = Instance.new("Frame")
-        knob.Name = "Knob"
-        knob.Size = UDim2.new(0, isMobile and 14 : 12, 0, isMobile and 14 : 12)
-        knob.Position = state and UDim2.new(1, isMobile and -17 : -15, 0.5, 0) or UDim2.new(0, isMobile and 3 : 3, 0.5, 0)
-        knob.AnchorPoint = Vector2.new(0, 0.5)
-        knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        knob.BorderSizePixel = 0
-        knob.ZIndex = 6
-        knob.Parent = switch
-
-        local uic3 = Instance.new("UICorner")
-        uic3.CornerRadius = UDim.new(1, 0)
-        uic3.Parent = knob
-
-        local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(1, 0, 1, 0)
-        btn.BackgroundTransparency = 1
-        btn.Text = ""
-        btn.ZIndex = 7
-        btn.Parent = holder
-
-        local function toggle()
-            state = not state
-            toggleStates[key] = state
-            TweenService:Create(switch, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
-                BackgroundColor3 = state and Color3.fromRGB(88, 101, 242) or Color3.fromRGB(50, 50, 58)
-            }):Play()
-            TweenService:Create(knob, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
-                Position = state and UDim2.new(1, isMobile and -17 : -15, 0.5, 0) or UDim2.new(0, isMobile and 3 : 3, 0.5, 0)
-            }):Play()
-            if opts.callback then
-                opts.callback(state)
-            end
-        end
-
-        btn.Activated:Connect(toggle)
-
-        toggleSetters[key] = function(val)
-            if val ~= state then
-                toggle()
-            end
-        end
-
-        return {
-            SetValue = function(_, val)
-                if val ~= state then
-                    toggle()
-                end
-            end
-        }
-    end
-
-    function tabFuncs:AddButton(opts)
-        local holder = Instance.new("Frame")
-        holder.Size = UDim2.new(1, 0, 0, BUTTON_HEIGHT)
-        holder.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-        holder.BorderSizePixel = 0
-        holder.ZIndex = 4
-        holder.Parent = scrollFrame
-
-        local uic = Instance.new("UICorner")
-        uic.CornerRadius = UDim.new(0, isMobile and 7 : 8)
-        uic.Parent = holder
-
-        local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(1, 0, 1, 0)
-        btn.BackgroundTransparency = 1
-        btn.Text = opts.text
-        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        btn.Font = Enum.Font.GothamBold
-        btn.TextSize = FONT_SIZE
-        btn.ZIndex = 5
-        btn.Parent = holder
-
-        btn.Activated:Connect(function()
-            TweenService:Create(holder, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(78, 91, 222)}):Play()
-            wait(0.1)
-            TweenService:Create(holder, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(88, 101, 242)}):Play()
-            if opts.callback then
-                opts.callback()
-            end
-        end)
-    end
-
-    function tabFuncs:AddLabel(text)
-        local holder = Instance.new("Frame")
-        holder.Size = UDim2.new(1, 0, 0, BUTTON_HEIGHT - (isMobile and 6 : 8))
-        holder.BackgroundTransparency = 1
-        holder.ZIndex = 4
-        holder.Parent = scrollFrame
-
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, 0, 1, 0)
-        label.BackgroundTransparency = 1
-        label.Text = text
-        label.TextColor3 = Color3.fromRGB(160, 160, 170)
-        label.Font = Enum.Font.Gotham
-        label.TextSize = FONT_SIZE - 1
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.ZIndex = 5
-        label.Parent = holder
-
-        return {
-            SetText = function(_, txt)
-                label.Text = txt
-            end
-        }
-    end
-
-    return tabFuncs
+local function navBtn(text, yPos)
+    local b = Instance.new("TextButton")
+    b.Parent          = leftPanel
+    b.Size            = UDim2.new(1, -8, 0, 26)
+    b.Position        = UDim2.new(0, 4, 0, yPos)
+    b.BackgroundColor3 = C.btn
+    b.Text            = text
+    b.TextColor3      = C.white
+    b.Font            = Enum.Font.GothamBold
+    b.TextSize        = isMobile and 9 or 11
+    b.ZIndex          = 3
+    addCorner(b, 6)
+    b.MouseEnter:Connect(function() b.BackgroundColor3 = C.btnHover end)
+    b.MouseLeave:Connect(function() b.BackgroundColor3 = C.btn      end)
+    return b
 end
 
--- TAB КОНФИГОВ С ФИКСАМИ
-local settingsTab = library:CreateTab("Settings", "⚙️")
+local navMain     = navBtn("MAIN",  8)
+local navMacro    = navBtn("MACRO", 38)
+local navSettings = navBtn("SET",   68)
 
-settingsTab:AddLabel("「 Config Manager 」")
+-- ==========================================
+-- CONTENT AREA
+-- ==========================================
+local contentArea = Instance.new("Frame")
+contentArea.Parent               = mainFrame
+contentArea.Size                 = UDim2.new(0, CONTENT_W, 0, CONTENT_H)
+contentArea.Position             = UDim2.new(0, CONTENT_X, 0, CONTENT_Y)
+contentArea.BackgroundColor3     = C.panel
+contentArea.BackgroundTransparency = 0.25
+contentArea.ClipsDescendants     = true
+contentArea.ZIndex               = 2
+addCorner(contentArea, 10)
+addStroke(contentArea, C.accent, 2)
 
-local configInput
-local configDropdown
-local configListFrame
-local selectedConfig = nil
+local function makeScroll(visible, canvasH)
+    local sf = Instance.new("ScrollingFrame")
+    sf.Parent               = contentArea
+    sf.Size                 = UDim2.new(1, -4, 1, -4)
+    sf.Position             = UDim2.new(0, 2, 0, 2)
+    sf.BackgroundTransparency = 1
+    sf.Visible              = visible
+    sf.ZIndex               = 3
+    sf.ScrollBarThickness   = 3
+    sf.ScrollBarImageColor3 = C.accent
+    sf.BorderSizePixel      = 0
+    sf.CanvasSize           = UDim2.new(0, 0, 0, canvasH or 500)
+    return sf
+end
 
--- Input для имени конфига
-local inputHolder = Instance.new("Frame")
-inputHolder.Size = UDim2.new(1, 0, 0, BUTTON_HEIGHT)
-inputHolder.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
-inputHolder.BorderSizePixel = 0
-inputHolder.ZIndex = 4
-inputHolder.Parent = settingsTab.content or contentFrame:FindFirstChild("SettingsContent")
+local scrollMain     = makeScroll(true,  480)
+local scrollMacro    = makeScroll(false, 480)
+local scrollSettings = makeScroll(false, 620)
 
-local uicInput = Instance.new("UICorner")
-uicInput.CornerRadius = UDim.new(0, isMobile and 7 : 8)
-uicInput.Parent = inputHolder
+-- ==========================================
+-- TOGGLE FACTORY
+-- ==========================================
+local function makeToggle(parent, key, label, yPos, callback)
+    local frame = Instance.new("Frame")
+    frame.Parent               = parent
+    frame.Size                 = UDim2.new(1, -14, 0, 33)
+    frame.Position             = UDim2.new(0, 7, 0, yPos)
+    frame.BackgroundColor3     = C.panel
+    frame.BackgroundTransparency = 0.35
+    frame.ZIndex               = 4
+    addCorner(frame, 8)
+    local stroke = addStroke(frame, C.accent, 1, 0.65)
 
-configInput = Instance.new("TextBox")
-configInput.Size = UDim2.new(1, isMobile and -16 : -20, 1, 0)
-configInput.Position = UDim2.new(0, isMobile and 8 : 10, 0, 0)
-configInput.BackgroundTransparency = 1
-configInput.PlaceholderText = "Config Name..."
-configInput.Text = ""
-configInput.TextColor3 = Color3.fromRGB(220, 220, 230)
-configInput.PlaceholderColor3 = Color3.fromRGB(120, 120, 130)
-configInput.Font = Enum.Font.Gotham
-configInput.TextSize = FONT_SIZE
-configInput.TextXAlignment = Enum.TextXAlignment.Left
-configInput.ClearTextOnFocus = false
-configInput.ZIndex = 5
-configInput.Parent = inputHolder
+    local lbl = Instance.new("TextLabel")
+    lbl.Parent             = frame
+    lbl.Size               = UDim2.new(1, -62, 1, 0)
+    lbl.Position           = UDim2.new(0, 8, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text               = label
+    lbl.TextColor3         = C.white
+    lbl.Font               = Enum.Font.GothamBold
+    lbl.TextSize           = isMobile and 11 or 12
+    lbl.TextXAlignment     = Enum.TextXAlignment.Left
+    lbl.ZIndex             = 5
 
--- Create Config Button
-settingsTab:AddButton({
-    text = "➕ Create Config",
-    callback = function()
-        local cfgName = configInput.Text
-        if cfgName ~= "" then
-            local snapshot = {}
-            for k, v in pairs(toggleStates) do
-                snapshot[k] = v
-            end
-            configList[cfgName] = snapshot
-                        configInput.Text = ""
-            print("✅ Config created:", cfgName)
-            updateConfigList()
+    local track = Instance.new("Frame")
+    track.Parent          = frame
+    track.Size            = UDim2.new(0, 40, 0, 18)
+    track.Position        = UDim2.new(1, -48, 0.5, -9)
+    track.BackgroundColor3 = C.track
+    track.ZIndex          = 5
+    addCorner(track, 9)
+
+    local knob = Instance.new("Frame")
+    knob.Parent          = track
+    knob.Size            = UDim2.new(0, 14, 0, 14)
+    knob.Position        = UDim2.new(0, 2, 0.5, -7)
+    knob.BackgroundColor3 = C.off
+    knob.ZIndex          = 6
+    addCorner(knob, 7)
+
+    local hitbox = Instance.new("TextButton")
+    hitbox.Parent             = frame
+    hitbox.Size               = UDim2.new(1, 0, 1, 0)
+    hitbox.BackgroundTransparency = 1
+    hitbox.Text               = ""
+    hitbox.ZIndex             = 7
+
+    local isOn = false
+    toggleStates[key] = false
+
+    local function applyVisual(v)
+        local ti = TweenInfo.new(0.22, Enum.EasingStyle.Quad)
+        if v then
+            TweenService:Create(knob,  ti, {Position = UDim2.new(1,-16,0.5,-7), BackgroundColor3 = C.on}):Play()
+            TweenService:Create(track, ti, {BackgroundColor3 = C.trackOn}):Play()
+            TweenService:Create(stroke,TweenInfo.new(0.18),{Transparency=0, Color=C.on}):Play()
         else
-            warn("❌ Please enter a config name!")
+            TweenService:Create(knob,  ti, {Position = UDim2.new(0,2,0.5,-7), BackgroundColor3 = C.off}):Play()
+            TweenService:Create(track, ti, {BackgroundColor3 = C.track}):Play()
+            TweenService:Create(stroke,TweenInfo.new(0.18),{Transparency=0.65, Color=C.accent}):Play()
         end
     end
-})
 
--- Dropdown для списка конфигов
-local dropdownHolder = Instance.new("Frame")
-dropdownHolder.Size = UDim2.new(1, 0, 0, BUTTON_HEIGHT)
-dropdownHolder.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
-dropdownHolder.BorderSizePixel = 0
-dropdownHolder.ZIndex = 4
-dropdownHolder.ClipsDescendants = false
-dropdownHolder.Parent = settingsTab.content or contentFrame:FindFirstChild("SettingsContent")
+    local function setEnabled(v, silent)
+        isOn = v
+        toggleStates[key] = v
+        applyVisual(v)
+        if not silent and callback then callback(v) end
+    end
 
-local uicDrop = Instance.new("UICorner")
-uicDrop.CornerRadius = UDim.new(0, isMobile and 7 : 8)
-uicDrop.Parent = dropdownHolder
+    hitbox.Activated:Connect(function() setEnabled(not isOn) end)
+    hitbox.MouseEnter:Connect(function() frame.BackgroundTransparency = 0.15 end)
+    hitbox.MouseLeave:Connect(function() frame.BackgroundTransparency = 0.35 end)
 
-local dropdownBtn = Instance.new("TextButton")
-dropdownBtn.Size = UDim2.new(1, 0, 1, 0)
-dropdownBtn.BackgroundTransparency = 1
-dropdownBtn.Text = ""
-dropdownBtn.ZIndex = 5
-dropdownBtn.Parent = dropdownHolder
+    toggleSetters[key] = setEnabled
+    return setEnabled
+end
 
-local dropdownLabel = Instance.new("TextLabel")
-dropdownLabel.Size = UDim2.new(1, isMobile and -50 : -60, 1, 0)
-dropdownLabel.Position = UDim2.new(0, isMobile and 8 : 10, 0, 0)
-dropdownLabel.BackgroundTransparency = 1
-dropdownLabel.Text = selectedConfig or "Select Config..."
-dropdownLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
-dropdownLabel.Font = Enum.Font.Gotham
-dropdownLabel.TextSize = FONT_SIZE
-dropdownLabel.TextXAlignment = Enum.TextXAlignment.Left
-dropdownLabel.ZIndex = 6
-dropdownLabel.Parent = dropdownHolder
+-- ==========================================
+-- ВКЛАДКА: MAIN
+-- ==========================================
+local function sectionTitle(parent, text, yPos)
+    local l = Instance.new("TextLabel")
+    l.Parent             = parent
+    l.Size               = UDim2.new(1,-14,0,20)
+    l.Position           = UDim2.new(0,7,0,yPos)
+    l.BackgroundTransparency = 1
+    l.Text               = text
+    l.TextColor3         = C.white
+    l.Font               = Enum.Font.GothamBold
+    l.TextSize           = 14
+    l.TextXAlignment     = Enum.TextXAlignment.Left
+    l.ZIndex             = 4
+    return l
+end
 
-local dropdownArrow = Instance.new("TextLabel")
-dropdownArrow.Size = UDim2.new(0, isMobile and 20 : 20, 1, 0)
-dropdownArrow.Position = UDim2.new(1, isMobile and -28 : -30, 0, 0)
-dropdownArrow.BackgroundTransparency = 1
-dropdownArrow.Text = "▼"
-dropdownArrow.TextColor3 = Color3.fromRGB(180, 180, 190)
-dropdownArrow.Font = Enum.Font.Gotham
-dropdownArrow.TextSize = isMobile and 12 : 10
-dropdownArrow.ZIndex = 6
-dropdownArrow.Parent = dropdownHolder
+sectionTitle(scrollMain, "⚡ MAIN", 4)
 
--- Список конфигов (выпадающий)
-configListFrame = Instance.new("ScrollingFrame")
-configListFrame.Name = "ConfigList"
-configListFrame.Size = UDim2.new(1, 0, 0, 0)
-configListFrame.Position = UDim2.new(0, 0, 1, PADDING/2)
-configListFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
-configListFrame.BorderSizePixel = 0
-configListFrame.ScrollBarThickness = isMobile and 3 : 2
-configListFrame.ScrollBarImageColor3 = Color3.fromRGB(90, 90, 100)
-configListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-configListFrame.Visible = false
-configListFrame.ClipsDescendants = true
-configListFrame.ZIndex = 15
-configListFrame.Parent = dropdownHolder
+makeToggle(scrollMain, "Auto Skip",       "Auto Skip",       28,  function() end)
+makeToggle(scrollMain, "Auto x2 Speed",   "Auto x2 Speed",   65,  function() end)
+makeToggle(scrollMain, "Auto x3 Speed",   "Auto x3 Speed",   102, function() end)
+makeToggle(scrollMain, "Auto Play Again", "Auto Play Again", 139, function() end)
 
-local uicList = Instance.new("UICorner")
-uicList.CornerRadius = UDim.new(0, isMobile and 7 : 8)
-uicList.Parent = configListFrame
+-- AUTO MODE ROW
+local autoRow = Instance.new("Frame")
+autoRow.Parent               = scrollMain
+autoRow.Size                 = UDim2.new(1,-14,0,33)
+autoRow.Position             = UDim2.new(0,7,0,176)
+autoRow.BackgroundColor3     = C.panel
+autoRow.BackgroundTransparency = 0.35
+autoRow.ZIndex               = 4
+addCorner(autoRow, 8)
+addStroke(autoRow, C.accent, 1, 0.65)
 
-local listLayout = Instance.new("UIListLayout")
-listLayout.Padding = UDim.new(0, PADDING/2)
-listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-listLayout.Parent = configListFrame
+local autoLbl = Instance.new("TextLabel")
+autoLbl.Parent             = autoRow
+autoLbl.Size               = UDim2.new(0,80,1,0)
+autoLbl.Position           = UDim2.new(0,8,0,0)
+autoLbl.BackgroundTransparency = 1
+autoLbl.Text               = "Auto Mode"
+autoLbl.TextColor3         = C.white
+autoLbl.Font               = Enum.Font.GothamBold
+autoLbl.TextSize           = isMobile and 11 or 12
+autoLbl.TextXAlignment     = Enum.TextXAlignment.Left
+autoLbl.ZIndex             = 5
 
-local dropdownOpen = false
+local wavePickBtn = Instance.new("TextButton")
+wavePickBtn.Parent          = autoRow
+wavePickBtn.Size            = UDim2.new(0,120,0,22)
+wavePickBtn.Position        = UDim2.new(1,-128,0.5,-11)
+wavePickBtn.BackgroundColor3 = C.track
+wavePickBtn.Text            = "Easy  ▼"
+wavePickBtn.TextColor3      = C.dim
+wavePickBtn.Font            = Enum.Font.Gotham
+wavePickBtn.TextSize        = 11
+wavePickBtn.ZIndex          = 5
+addCorner(wavePickBtn, 6)
 
-dropdownBtn.Activated:Connect(function()
-    dropdownOpen = not dropdownOpen
-    local targetSize = dropdownOpen and UDim2.new(1, 0, 0, math.min(150, #configList * (BUTTON_HEIGHT + PADDING/2) + PADDING)) or UDim2.new(1, 0, 0, 0)
-    
-    configListFrame.Visible = true
-    TweenService:Create(configListFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {Size = targetSize}):Play()
-    TweenService:Create(dropdownArrow, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {Rotation = dropdownOpen and 180 or 0}):Play()
-    
-    if not dropdownOpen then
-        wait(0.2)
-        configListFrame.Visible = false
+-- WAVE DROPDOWN
+local waveDD = Instance.new("Frame")
+waveDD.Parent               = scrollMain
+waveDD.Size                 = UDim2.new(0,120,0,0)
+waveDD.Position             = UDim2.new(1,-128,0,212)
+waveDD.BackgroundColor3     = C.bg
+waveDD.BackgroundTransparency = 0.05
+waveDD.Visible              = false
+waveDD.ClipsDescendants     = true
+waveDD.ZIndex               = 15
+addCorner(waveDD, 8)
+addStroke(waveDD, C.accent, 2)
+
+local waves   = {"Easy","Normal","Hard","Insane","Impossible","Apocalypse"}
+local waveIH  = 28
+for i, w in ipairs(waves) do
+    local item = Instance.new("TextButton")
+    item.Parent          = waveDD
+    item.Size            = UDim2.new(1,-8,0,waveIH-4)
+    item.Position        = UDim2.new(0,4,0,(i-1)*waveIH+4)
+    item.BackgroundColor3 = C.panel
+    item.BackgroundTransparency = 0.4
+    item.Text            = w
+    item.TextColor3      = C.white
+    item.Font            = Enum.Font.GothamBold
+    item.TextSize        = 11
+    item.ZIndex          = 16
+    addCorner(item, 5)
+    local wName = w
+    item.Activated:Connect(function()
+        selectedWave         = wName
+        wavePickBtn.Text     = wName .. "  ▼"
+        wavePickBtn.TextColor3 = C.on
+        TweenService:Create(waveDD,TweenInfo.new(0.18),{Size=UDim2.new(0,120,0,0)}):Play()
+        task.delay(0.18, function() waveDD.Visible = false end)
+    end)
+    item.MouseEnter:Connect(function() item.BackgroundTransparency = 0.15 end)
+    item.MouseLeave:Connect(function() item.BackgroundTransparency = 0.4  end)
+end
+
+local waveDDH = #waves * waveIH + 8
+wavePickBtn.Activated:Connect(function()
+    if waveDD.Visible then
+        TweenService:Create(waveDD,TweenInfo.new(0.18),{Size=UDim2.new(0,120,0,0)}):Play()
+        task.delay(0.18, function() waveDD.Visible = false end)
+    else
+        waveDD.Visible = true
+        waveDD.Size    = UDim2.new(0,120,0,0)
+        TweenService:Create(waveDD,TweenInfo.new(0.18),{Size=UDim2.new(0,120,0,waveDDH)}):Play()
     end
 end)
 
-function updateConfigList()
-    for _, child in ipairs(configListFrame:GetChildren()) do
-        if child:IsA("Frame") then
-            child:Destroy()
+-- ==========================================
+-- ВКЛАДКА: MACRO
+-- ==========================================
+sectionTitle(scrollMacro, "⚡ MACRO", 4)
+
+-- Small action buttons
+local function smallBtn(parent, text, x, y, w, h)
+    local b = Instance.new("TextButton")
+    b.Parent          = parent
+    b.Size            = UDim2.new(0,w or 90,0,h or 26)
+    b.Position        = UDim2.new(0,x,0,y)
+    b.BackgroundColor3 = C.btn
+    b.Text            = text
+    b.TextColor3      = C.white
+    b.Font            = Enum.Font.GothamBold
+    b.TextSize        = 10
+    b.ZIndex          = 4
+    addCorner(b, 6)
+    b.MouseEnter:Connect(function() b.BackgroundColor3 = C.btnHover end)
+    b.MouseLeave:Connect(function() b.BackgroundColor3 = C.btn      end)
+    return b
+end
+
+local mCreateBtn  = smallBtn(scrollMacro, "📁 Create",  7, 28, 90, 26)
+local mRefreshBtn = smallBtn(scrollMacro, "🔄 Refresh", 7, 58, 90, 26)
+
+-- LIST LABEL
+local listFrame = Instance.new("Frame")
+listFrame.Parent          = scrollMacro
+listFrame.Size            = UDim2.new(0,90,0,26)
+listFrame.Position        = UDim2.new(0,7,0,88)
+listFrame.BackgroundColor3 = C.btn
+listFrame.BackgroundTransparency = 0.2
+listFrame.ZIndex          = 4
+addCorner(listFrame, 6)
+local listFrameLbl = Instance.new("TextLabel")
+listFrameLbl.Parent             = listFrame
+listFrameLbl.Size               = UDim2.new(1,0,1,0)
+listFrameLbl.BackgroundTransparency = 1
+listFrameLbl.Text               = "📋 List"
+listFrameLbl.TextColor3         = C.white
+listFrameLbl.Font               = Enum.Font.GothamBold
+listFrameLbl.TextSize           = 10
+listFrameLbl.ZIndex             = 5
+
+-- MACRO SELECTOR
+local macroSelBtn = Instance.new("TextButton")
+macroSelBtn.Parent          = scrollMacro
+macroSelBtn.Size            = UDim2.new(1,-104,0,26)
+macroSelBtn.Position        = UDim2.new(0,100,0,88)
+macroSelBtn.BackgroundColor3 = C.panel
+macroSelBtn.BackgroundTransparency = 0.3
+macroSelBtn.Text            = ""
+macroSelBtn.ZIndex          = 4
+addCorner(macroSelBtn, 6)
+
+local macroSelLbl = Instance.new("TextLabel")
+macroSelLbl.Parent             = macroSelBtn
+macroSelLbl.Size               = UDim2.new(1,-20,1,0)
+macroSelLbl.Position           = UDim2.new(0,8,0,0)
+macroSelLbl.BackgroundTransparency = 1
+macroSelLbl.Text               = "Выберите макрос..."
+macroSelLbl.TextColor3         = C.dim
+macroSelLbl.Font               = Enum.Font.Gotham
+macroSelLbl.TextSize           = 10
+macroSelLbl.TextXAlignment     = Enum.TextXAlignment.Left
+macroSelLbl.ZIndex             = 5
+
+local macroSelArrow = Instance.new("TextLabel")
+macroSelArrow.Parent             = macroSelBtn
+macroSelArrow.Size               = UDim2.new(0,16,1,0)
+macroSelArrow.Position           = UDim2.new(1,-18,0,0)
+macroSelArrow.BackgroundTransparency = 1
+macroSelArrow.Text               = "▼"
+macroSelArrow.TextColor3         = C.dim
+macroSelArrow.Font               = Enum.Font.GothamBold
+macroSelArrow.TextSize           = 9
+macroSelArrow.ZIndex             = 5
+
+macroSelBtn.MouseEnter:Connect(function() macroSelBtn.BackgroundTransparency = 0.1 end)
+macroSelBtn.MouseLeave:Connect(function() macroSelBtn.BackgroundTransparency = 0.3 end)
+
+-- MACRO DROPDOWN
+local macroDD = Instance.new("ScrollingFrame")
+macroDD.Parent               = scrollMacro
+macroDD.Size                 = UDim2.new(1,-104,0,0)
+macroDD.Position             = UDim2.new(0,100,0,117)
+macroDD.BackgroundColor3     = C.bg
+macroDD.BackgroundTransparency = 0.05
+macroDD.Visible              = false
+macroDD.ZIndex               = 15
+macroDD.ScrollBarThickness   = 3
+macroDD.ScrollBarImageColor3 = C.accent
+macroDD.BorderSizePixel      = 0
+macroDD.ClipsDescendants     = true
+addCorner(macroDD, 8)
+addStroke(macroDD, C.accent, 2)
+
+local function refreshMacroDD()
+    for _, ch in pairs(macroDD:GetChildren()) do
+        if ch:IsA("TextButton") then ch:Destroy() end
+    end
+    for i, mac in ipairs(macros) do
+        local item = Instance.new("TextButton")
+        item.Parent          = macroDD
+        item.Size            = UDim2.new(1,-8,0,26)
+        item.Position        = UDim2.new(0,4,0,(i-1)*30+4)
+        item.BackgroundColor3 = C.panel
+        item.BackgroundTransparency = 0.4
+        item.Text            = "📄 "..mac.name
+        item.TextColor3      = C.white
+        item.Font            = Enum.Font.GothamBold
+        item.TextSize        = 10
+        item.TextXAlignment  = Enum.TextXAlignment.Left
+        item.ZIndex          = 16
+        addCorner(item, 5)
+        local n = mac.name
+        item.Activated:Connect(function()
+            selectedMacro       = n
+            macroSelLbl.Text    = "📄 "..n
+            macroSelLbl.TextColor3 = C.on
+            macroDD.Visible     = false
+        end)
+        item.MouseEnter:Connect(function() item.BackgroundTransparency = 0.15 end)
+        item.MouseLeave:Connect(function() item.BackgroundTransparency = 0.4  end)
+    end
+    macroDD.CanvasSize = UDim2.new(0,0,0,#macros*30+8)
+end
+
+macroSelBtn.Activated:Connect(function()
+    refreshMacroDD()
+    if macroDD.Visible then
+        macroDD.Visible = false
+    else
+        macroDD.Visible = true
+    end
+end)
+
+-- WIDE TOGGLES (MACRO)
+makeToggle(scrollMacro, "Record Macro",   "⏺ Record Macro",   120, function(v) isRecording = v end)
+makeToggle(scrollMacro, "Play Macro",     "▶ Play Macro",      157, function(v)
+    isPlaying = v
+    if useHotkey then hotkeyBtn.Visible = v end
+end)
+makeToggle(scrollMacro, "Time Placement", "⏱ Time Placement",  194, function(v) end)
+makeToggle(scrollMacro, "Unit Placement", "📍 Unit Placement",  231, function(v) end)
+makeToggle(scrollMacro, "Loop Mode",      "🔁 Loop Mode",       268, function(v) loopMode = v end)
+makeToggle(scrollMacro, "Hotkey",         "⌨ Hotkey",          305, function(v)
+    useHotkey = v
+    hotkeyBtn.Visible = v and isPlaying
+end)
+
+-- CREATE MACRO WINDOW
+local createMacroWin = Instance.new("Frame")
+createMacroWin.Parent          = screenGui
+createMacroWin.Size            = UDim2.new(0,270,0,138)
+createMacroWin.Position        = UDim2.new(0.5,-135,0.5,-69)
+createMacroWin.BackgroundColor3 = C.bg
+createMacroWin.BackgroundTransparency = 0.05
+createMacroWin.Visible         = false
+createMacroWin.ZIndex          = 50
+addCorner(createMacroWin, 12)
+addStroke(createMacroWin, C.accent, 3)
+
+local function popupTitle(win, text)
+    local l = Instance.new("TextLabel")
+    l.Parent             = win
+    l.Size               = UDim2.new(1,-16,0,26)
+    l.Position           = UDim2.new(0,8,0,8)
+    l.BackgroundTransparency = 1
+    l.Text               = text
+    l.TextColor3         = C.white
+    l.Font               = Enum.Font.GothamBold
+    l.TextSize           = 13
+    l.TextXAlignment     = Enum.TextXAlignment.Left
+    l.ZIndex             = 51
+end
+
+local function popupBox(win, placeholder)
+    local box = Instance.new("TextBox")
+    box.Parent          = win
+    box.Size            = UDim2.new(1,-20,0,30)
+    box.Position        = UDim2.new(0,10,0,40)
+    box.BackgroundColor3 = C.panel
+    box.BackgroundTransparency = 0.2
+    box.Text            = ""
+    box.PlaceholderText = placeholder
+    box.TextColor3      = C.white
+    box.PlaceholderColor3 = C.dim
+    box.Font            = Enum.Font.Gotham
+    box.TextSize        = 12
+    box.ZIndex          = 51
+    addCorner(box, 7)
+    return box
+end
+
+local function popupBtns(win, onConfirm, onCancel)
+    local confirm = Instance.new("TextButton")
+    confirm.Parent          = win
+    confirm.Size            = UDim2.new(0,110,0,28)
+    confirm.Position        = UDim2.new(0,10,1,-38)
+    confirm.BackgroundColor3 = C.on
+    confirm.Text            = "✓ SAVE"
+    confirm.TextColor3      = C.white
+    confirm.Font            = Enum.Font.GothamBold
+    confirm.TextSize        = 12
+    confirm.ZIndex          = 51
+    addCorner(confirm, 7)
+
+    local cancel = Instance.new("TextButton")
+    cancel.Parent          = win
+    cancel.Size            = UDim2.new(0,110,0,28)
+    cancel.Position        = UDim2.new(1,-120,1,-38)
+    cancel.BackgroundColor3 = C.danger
+    cancel.Text            = "✕ CANCEL"
+    cancel.TextColor3      = C.white
+    cancel.Font            = Enum.Font.GothamBold
+    cancel.TextSize        = 12
+    cancel.ZIndex          = 51
+    addCorner(cancel, 7)
+
+    confirm.Activated:Connect(onConfirm)
+    cancel.Activated:Connect(onCancel)
+    return confirm, cancel
+end
+
+popupTitle(createMacroWin, "📁 CREATE MACRO")
+local macroNameBox = popupBox(createMacroWin, "Название макроса...")
+popupBtns(createMacroWin,
+    function()
+        local n = macroNameBox.Text
+        if n ~= "" then
+            table.insert(macros, {name=n, actions={}})
+            createMacroWin.Visible = false
+            macroNameBox.Text = ""
+            refreshMacroDD()
+            saveMacros()
         end
+    end,
+    function()
+        createMacroWin.Visible = false
+        macroNameBox.Text = ""
+    end
+)
+
+mCreateBtn.Activated:Connect(function()
+    createMacroWin.Visible = true
+    macroNameBox.Text = ""
+end)
+mRefreshBtn.Activated:Connect(refreshMacroDD)
+
+-- ==========================================
+-- ВКЛАДКА: SETTINGS (С ПОЛНЫМИ ИСПРАВЛЕНИЯМИ)
+-- ==========================================
+sectionTitle(scrollSettings, "⚡ SETTINGS", 4)
+
+-- CONFIG INPUT BOX
+local cfgInputFrame = Instance.new("Frame")
+cfgInputFrame.Parent               = scrollSettings
+cfgInputFrame.Size                 = UDim2.new(1,-14,0,33)
+cfgInputFrame.Position             = UDim2.new(0,7,0,28)
+cfgInputFrame.BackgroundColor3     = C.panel
+cfgInputFrame.BackgroundTransparency = 0.35
+cfgInputFrame.ZIndex               = 4
+addCorner(cfgInputFrame, 8)
+addStroke(cfgInputFrame, C.accent, 1, 0.65)
+
+local cfgInputBox = Instance.new("TextBox")
+cfgInputBox.Parent          = cfgInputFrame
+cfgInputBox.Size            = UDim2.new(1,-16,1,0)
+cfgInputBox.Position        = UDim2.new(0,8,0,0)
+cfgInputBox.BackgroundTransparency = 1
+cfgInputBox.PlaceholderText = "Config Name..."
+cfgInputBox.Text            = ""
+cfgInputBox.TextColor3      = C.white
+cfgInputBox.PlaceholderColor3 = C.dim
+cfgInputBox.Font            = Enum.Font.Gotham
+cfgInputBox.TextSize        = isMobile and 11 or 12
+cfgInputBox.TextXAlignment  = Enum.TextXAlignment.Left
+cfgInputBox.ClearTextOnFocus = false
+cfgInputBox.ZIndex          = 5
+
+-- CONFIG ROW (Create | List | Load)
+local cfgRow = Instance.new("Frame")
+cfgRow.Parent               = scrollSettings
+cfgRow.Size                 = UDim2.new(1,-14,0,33)
+cfgRow.Position             = UDim2.new(0,7,0,68)
+cfgRow.BackgroundColor3     = C.panel
+cfgRow.BackgroundTransparency = 0.35
+cfgRow.ZIndex               = 4
+addCorner(cfgRow, 8)
+addStroke(cfgRow, C.accent, 1, 0.65)
+
+local cfgRowLbl = Instance.new("TextLabel")
+cfgRowLbl.Parent             = cfgRow
+cfgRowLbl.Size               = UDim2.new(0,55,1,0)
+cfgRowLbl.Position           = UDim2.new(0,8,0,0)
+cfgRowLbl.BackgroundTransparency = 1
+cfgRowLbl.Text               = "Config"
+cfgRowLbl.TextColor3         = C.white
+cfgRowLbl.Font               = Enum.Font.GothamBold
+cfgRowLbl.TextSize           = isMobile and 11 or 12
+cfgRowLbl.TextXAlignment     = Enum.TextXAlignment.Left
+cfgRowLbl.ZIndex             = 5
+
+-- 3 КНОПКИ
+local BW = 56
+local GAP = 4
+local cfgCreateBtn = Instance.new("TextButton")
+cfgCreateBtn.Parent          = cfgRow
+cfgCreateBtn.Size            = UDim2.new(0,BW,0,22)
+cfgCreateBtn.Position        = UDim2.new(1,-(BW*3+GAP*2+6),0.5,-11)
+cfgCreateBtn.BackgroundColor3 = C.btn
+cfgCreateBtn.Text            = "Create"
+cfgCreateBtn.TextColor3      = C.white
+cfgCreateBtn.Font            = Enum.Font.GothamBold
+cfgCreateBtn.TextSize        = 10
+cfgCreateBtn.ZIndex          = 5
+addCorner(cfgCreateBtn, 5)
+cfgCreateBtn.MouseEnter:Connect(function() cfgCreateBtn.BackgroundColor3 = C.btnHover end)
+cfgCreateBtn.MouseLeave:Connect(function() cfgCreateBtn.BackgroundColor3 = C.btn      end)
+
+local cfgListBtn = Instance.new("TextButton")
+cfgListBtn.Parent          = cfgRow
+cfgListBtn.Size            = UDim2.new(0,BW,0,22)
+cfgListBtn.Position        = UDim2.new(1,-(BW*2+GAP*1+6),0.5,-11)
+cfgListBtn.BackgroundColor3 = C.btn
+cfgListBtn.Text            = "List"
+cfgListBtn.TextColor3      = C.white
+cfgListBtn.Font            = Enum.Font.GothamBold
+cfgListBtn.TextSize        = 10
+cfgListBtn.ZIndex          = 5
+addCorner(cfgListBtn, 5)
+cfgListBtn.MouseEnter:Connect(function() cfgListBtn.BackgroundColor3 = C.btnHover end)
+cfgListBtn.MouseLeave:Connect(function() cfgListBtn.BackgroundColor3 = C.btn      end)
+
+local cfgLoadBtn = Instance.new("TextButton")
+cfgLoadBtn.Parent          = cfgRow
+cfgLoadBtn.Size            = UDim2.new(0,BW,0,22)
+cfgLoadBtn.Position        = UDim2.new(1,-(BW+6),0.5,-11)
+cfgLoadBtn.BackgroundColor3 = C.btn
+cfgLoadBtn.Text            = "Load"
+cfgLoadBtn.TextColor3      = C.white
+cfgLoadBtn.Font            = Enum.Font.GothamBold
+cfgLoadBtn.TextSize        = 10
+cfgLoadBtn.ZIndex          = 5
+addCorner(cfgLoadBtn, 5)
+cfgLoadBtn.MouseEnter:Connect(function() cfgLoadBtn.BackgroundColor3 = C.btnHover end)
+cfgLoadBtn.MouseLeave:Connect(function() cfgLoadBtn.BackgroundColor3 = C.btn      end)
+
+-- СТАТУС ВЫБРАННОГО КОНФИГА
+local cfgStatusLbl = Instance.new("TextLabel")
+cfgStatusLbl.Parent             = scrollSettings
+cfgStatusLbl.Size               = UDim2.new(1,-14,0,16)
+cfgStatusLbl.Position           = UDim2.new(0,7,0,108)
+cfgStatusLbl.BackgroundTransparency = 1
+cfgStatusLbl.Text               = "Конфиг не выбран"
+cfgStatusLbl.TextColor3         = C.dim
+cfgStatusLbl.Font               = Enum.Font.Gotham
+cfgStatusLbl.TextSize           = 10
+cfgStatusLbl.TextXAlignment     = Enum.TextXAlignment.Left
+cfgStatusLbl.ZIndex             = 4
+
+-- CONFIG DROPDOWN (ИСПРАВЛЕННЫЙ)
+local cfgDD = Instance.new("ScrollingFrame")
+cfgDD.Parent               = scrollSettings
+cfgDD.Size                 = UDim2.new(1,-14,0,0)
+cfgDD.Position             = UDim2.new(0,7,0,128)
+cfgDD.BackgroundColor3     = C.bg
+cfgDD.BackgroundTransparency = 0.05
+cfgDD.Visible              = false
+cfgDD.ClipsDescendants     = true
+cfgDD.ZIndex               = 20
+cfgDD.ScrollBarThickness   = 3
+cfgDD.ScrollBarImageColor3 = C.accent
+cfgDD.BorderSizePixel      = 0
+addCorner(cfgDD, 8)
+addStroke(cfgDD, C.accent, 2)
+
+local function refreshCfgDD()
+    for _, ch in pairs(cfgDD:GetChildren()) do
+        if ch:IsA("Frame") then ch:Destroy() end
     end
     
-    local count = 0
-    for cfgName, _ in pairs(configList) do
-        count = count + 1
+    for i, cfg in ipairs(configs) do
+        local isSel = (cfg.name == selectedConfig)
         
         local itemFrame = Instance.new("Frame")
-        itemFrame.Size = UDim2.new(1, -PADDING, 0, BUTTON_HEIGHT - 4)
-        itemFrame.BackgroundColor3 = (selectedConfig == cfgName) and Color3.fromRGB(88, 101, 242) or Color3.fromRGB(30, 30, 38)
-        itemFrame.BorderSizePixel = 0
-        itemFrame.ZIndex = 16
-        itemFrame.Parent = configListFrame
-        
-        local uicItem = Instance.new("UICorner")
-        uicItem.CornerRadius = UDim.new(0, isMobile and 6 : 7)
-        uicItem.Parent = itemFrame
+        itemFrame.Parent          = cfgDD
+        itemFrame.Size            = UDim2.new(1,-8,0,30)
+        itemFrame.Position        = UDim2.new(0,4,0,(i-1)*34+4)
+        itemFrame.BackgroundColor3 = isSel and Color3.fromRGB(88, 101, 242) or C.panel
+        itemFrame.BackgroundTransparency = isSel and 0.05 or 0.4
+        itemFrame.ZIndex          = 21
+        addCorner(itemFrame, 5)
         
         local itemBtn = Instance.new("TextButton")
-        itemBtn.Size = UDim2.new(1, isMobile and -36 : -40, 1, 0)
+        itemBtn.Parent          = itemFrame
+        itemBtn.Size            = UDim2.new(1,-40,1,0)
+        itemBtn.Position        = UDim2.new(0,0,0,0)
         itemBtn.BackgroundTransparency = 1
-        itemBtn.Text = cfgName
-        itemBtn.TextColor3 = (selectedConfig == cfgName) and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(200, 200, 210)
-        itemBtn.Font = Enum.Font.Gotham
-        itemBtn.TextSize = FONT_SIZE - 1
-        itemBtn.TextXAlignment = Enum.TextXAlignment.Left
-        itemBtn.TextTruncate = Enum.TextTruncate.AtEnd
-        itemBtn.ZIndex = 17
-        itemBtn.Parent = itemFrame
+        itemBtn.Text            = "⚙️ "..cfg.name
+        itemBtn.TextColor3      = isSel and C.on or C.white
+        itemBtn.Font            = Enum.Font.GothamBold
+        itemBtn.TextSize        = 10
+        itemBtn.TextXAlignment  = Enum.TextXAlignment.Left
+        itemBtn.ZIndex          = 22
         
         local padding = Instance.new("UIPadding")
-        padding.PaddingLeft = UDim.new(0, isMobile and 6 : 8)
+        padding.PaddingLeft = UDim.new(0,8)
         padding.Parent = itemBtn
         
-        -- Кнопка Delete
+        -- DELETE BUTTON
         local deleteBtn = Instance.new("TextButton")
-        deleteBtn.Size = UDim2.new(0, isMobile and 28 : 32, 0, isMobile and 20 : 22)
-        deleteBtn.Position = UDim2.new(1, isMobile and -30 : -34, 0.5, 0)
-        deleteBtn.AnchorPoint = Vector2.new(0, 0.5)
-        deleteBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 60)
-        deleteBtn.BorderSizePixel = 0
-        deleteBtn.Text = "🗑"
-        deleteBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        deleteBtn.Font = Enum.Font.Gotham
-        deleteBtn.TextSize = isMobile and 14 : 12
-        deleteBtn.ZIndex = 18
-        deleteBtn.Parent = itemFrame
+        deleteBtn.Parent          = itemFrame
+        deleteBtn.Size            = UDim2.new(0,32,0,22)
+        deleteBtn.Position        = UDim2.new(1,-34,0.5,-11)
+        deleteBtn.BackgroundColor3 = C.danger
+        deleteBtn.Text            = "🗑"
+        deleteBtn.TextColor3      = C.white
+        deleteBtn.Font            = Enum.Font.GothamBold
+        deleteBtn.TextSize        = 12
+        deleteBtn.ZIndex          = 23
+        addCorner(deleteBtn, 5)
         
-        local uicDelete = Instance.new("UICorner")
-        uicDelete.CornerRadius = UDim.new(0, isMobile and 5 : 6)
-        uicDelete.Parent = deleteBtn
+        local n = cfg.name
         
-        -- Выбор конфига
+        -- SELECT CONFIG
         itemBtn.Activated:Connect(function()
-            -- Сброс предыдущего выбора
-            for _, otherItem in ipairs(configListFrame:GetChildren()) do
-                if otherItem:IsA("Frame") and otherItem ~= itemFrame then
-                    otherItem.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
-                    local btn = otherItem:FindFirstChildOfClass("TextButton")
-                    if btn then
-                        btn.TextColor3 = Color3.fromRGB(200, 200, 210)
-                    end
-                end
-            end
-            
-            -- Выбор нового
-            selectedConfig = cfgName
-            itemFrame.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-            itemBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-            dropdownLabel.Text = cfgName
-            dropdownLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-            
-            -- Закрыть dropdown
-            dropdownOpen = false
-            TweenService:Create(configListFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {Size = UDim2.new(1, 0, 0, 0)}):Play()
-            TweenService:Create(dropdownArrow, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {Rotation = 0}):Play()
-            wait(0.2)
-            configListFrame.Visible = false
+            selectedConfig      = n
+            cfgStatusLbl.Text   = "Выбран: "..n
+            cfgStatusLbl.TextColor3 = C.on
+            refreshCfgDD()
         end)
         
-        -- Удаление конфига
+        -- DELETE CONFIG
         deleteBtn.Activated:Connect(function()
-            configList[cfgName] = nil
-            if selectedConfig == cfgName then
-                selectedConfig = nil
-                dropdownLabel.Text = "Select Config..."
-                dropdownLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+            for idx, c in ipairs(configs) do
+                if c.name == n then
+                    table.remove(configs, idx)
+                    break
+                end
             end
-            updateConfigList()
-            print("🗑 Config deleted:", cfgName)
+            if selectedConfig == n then
+                selectedConfig = nil
+                cfgStatusLbl.Text = "Конфиг не выбран"
+                cfgStatusLbl.TextColor3 = C.dim
+            end
+            saveConfigs()
+            refreshCfgDD()
+            print("🗑 Config deleted:", n)
+        end)
+        
+        itemBtn.MouseEnter:Connect(function() 
+            if selectedConfig ~= cfg.name then 
+                itemFrame.BackgroundTransparency = 0.2 
+            end 
+        end)
+        itemBtn.MouseLeave:Connect(function() 
+            if selectedConfig ~= cfg.name then 
+                itemFrame.BackgroundTransparency = 0.4 
+            end 
         end)
     end
     
-    listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        configListFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + PADDING)
-    end)
+    cfgDD.CanvasSize = UDim2.new(0,0,0,#configs*34+8)
     
-    if dropdownOpen then
-        local targetSize = UDim2.new(1, 0, 0, math.min(150, count * (BUTTON_HEIGHT + PADDING/2) + PADDING))
-        configListFrame.Size = targetSize
+    if cfgDD.Visible then
+        local targetH = math.min(#configs*34+8, 150)
+        TweenService:Create(cfgDD,TweenInfo.new(0.18),{Size=UDim2.new(1,-14,0,targetH)}):Play()
     end
 end
 
--- Load Config Button
-settingsTab:AddButton({
-    text = "📥 Load Config",
-    callback = function()
-        if selectedConfig and configList[selectedConfig] then
-            local cfg = configList[selectedConfig]
-            for key, value in pairs(cfg) do
-                if toggleSetters[key] then
-                    toggleSetters[key](value)
+-- LIST BUTTON
+cfgListBtn.Activated:Connect(function()
+    if cfgDD.Visible then
+        TweenService:Create(cfgDD,TweenInfo.new(0.18),{Size=UDim2.new(1,-14,0,0)}):Play()
+        task.delay(0.18, function() cfgDD.Visible = false end)
+    else
+        cfgDD.Visible = true
+        cfgDD.Size    = UDim2.new(1,-14,0,0)
+        refreshCfgDD()
+    end
+end)
+
+-- CREATE CONFIG
+cfgCreateBtn.Activated:Connect(function()
+    local n = cfgInputBox.Text
+    if n == "" then 
+        print("❌ Введите название конфига!")
+        return 
+    end
+    
+    -- Снапшот всех состояний
+    local snapshot = {}
+    for k, v in pairs(toggleStates) do
+        snapshot[k] = v
+    end
+    snapshot["_wave"] = selectedWave
+    
+    -- Перезаписать если существует
+    local found = false
+    for i, cfg in ipairs(configs) do
+        if cfg.name == n then
+            configs[i].states = snapshot
+            found = true
+            break
+        end
+    end
+    if not found then
+        table.insert(configs, {name=n, states=snapshot})
+    end
+    
+    cfgInputBox.Text = ""
+    saveConfigs()
+    refreshCfgDD()
+    print("✅ Config saved:", n)
+end)
+
+-- LOAD CONFIG
+cfgLoadBtn.Activated:Connect(function()
+    if not selectedConfig then
+        print("❌ Сначала выберите конфиг в List!")
+        return
+    end
+    
+    for _, cfg in ipairs(configs) do
+        if cfg.name == selectedConfig then
+            for key, val in pairs(cfg.states) do
+                if key == "_wave" then
+                    selectedWave           = val
+                    wavePickBtn.Text       = val.."  ▼"
+                    wavePickBtn.TextColor3 = C.on
+                elseif toggleSetters[key] then
+                    toggleSetters[key](val, false)
                 end
             end
             print("✅ Config loaded:", selectedConfig)
-        else
-            warn("❌ Please select a config first!")
+            return
         end
     end
-})
+end)
 
--- Delete Config Button (альтернативный способ)
-settingsTab:AddButton({
-    text = "🗑 Delete Selected Config",
-    callback = function()
-        if selectedConfig then
-            configList[selectedConfig] = nil
-            print("🗑 Config deleted:", selectedConfig)
-            selectedConfig = nil
-            dropdownLabel.Text = "Select Config..."
-            dropdownLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
-            updateConfigList()
-        else
-            warn("❌ No config selected!")
+-- DELETE SELECTED CONFIG BUTTON
+local cfgDelRow = Instance.new("Frame")
+cfgDelRow.Parent               = scrollSettings
+cfgDelRow.Size                 = UDim2.new(1,-14,0,33)
+cfgDelRow.Position             = UDim2.new(0,7,0,290)
+cfgDelRow.BackgroundColor3     = C.danger
+cfgDelRow.BackgroundTransparency = 0.3
+cfgDelRow.ZIndex               = 4
+addCorner(cfgDelRow, 8)
+addStroke(cfgDelRow, C.danger, 1, 0.5)
+
+local cfgDelBtn = Instance.new("TextButton")
+cfgDelBtn.Parent          = cfgDelRow
+cfgDelBtn.Size            = UDim2.new(1,0,1,0)
+cfgDelBtn.BackgroundTransparency = 1
+cfgDelBtn.Text            = "🗑 Delete Selected Config"
+cfgDelBtn.TextColor3      = C.white
+cfgDelBtn.Font            = Enum.Font.GothamBold
+cfgDelBtn.TextSize        = isMobile and 11 or 12
+cfgDelBtn.ZIndex          = 5
+
+cfgDelBtn.Activated:Connect(function()
+    if not selectedConfig then
+        print("❌ Сначала выберите конфиг!")
+        return
+    end
+    
+    for i, cfg in ipairs(configs) do
+        if cfg.name == selectedConfig then
+            table.remove(configs, i)
+            break
         end
     end
-})
+    
+    print("🗑 Config deleted:", selectedConfig)
+    selectedConfig = nil
+    cfgStatusLbl.Text = "Конфиг не выбран"
+    cfgStatusLbl.TextColor3 = C.dim
+    saveConfigs()
+    refreshCfgDD()
+end)
 
-settingsTab:AddLabel("━━━━━━━━━━━━━━")
+cfgDelBtn.MouseEnter:Connect(function() cfgDelRow.BackgroundTransparency = 0.15 end)
+cfgDelBtn.MouseLeave:Connect(function() cfgDelRow.BackgroundTransparency = 0.3  end)
 
--- Пример табов
-local mainTab = library:CreateTab("Main", "🏠")
-mainTab:AddLabel("「 Features 」")
+-- SEPARATOR
+local sep1 = Instance.new("Frame")
+sep1.Parent          = scrollSettings
+sep1.Size            = UDim2.new(1,-14,0,1)
+sep1.Position        = UDim2.new(0,7,0,330)
+sep1.BackgroundColor3 = C.accent
+sep1.BackgroundTransparency = 0.7
+sep1.BorderSizePixel = 0
+sep1.ZIndex          = 4
 
-mainTab:AddToggle({
-    key = "feature1",
-    text = "Feature 1",
-    default = false,
-    callback = function(val)
-        print("Feature 1:", val)
+-- ADDITIONAL SETTINGS
+sectionTitle(scrollSettings, "⚙️ OTHER", 340)
+
+makeToggle(scrollSettings, "AutoSave",     "💾 Auto Save Configs",  364, function(v) end)
+makeToggle(scrollSettings, "Notifications", "🔔 Notifications",      401, function(v) end)
+makeToggle(scrollSettings, "RainbowUI",    "🌈 Rainbow UI Border",  438, function(v)
+    if v then
+        rgbStroke.Enabled = true
+    else
+        rgbStroke.Enabled = false
+        rgbStroke.Color = C.accent
     end
-})
+end)
 
-mainTab:AddToggle({
-    key = "feature2",
-    text = "Feature 2",
-    default = false,
-    callback = function(val)
-        print("Feature 2:", val)
+-- RESET ALL BUTTON
+local resetRow = Instance.new("Frame")
+resetRow.Parent               = scrollSettings
+resetRow.Size                 = UDim2.new(1,-14,0,33)
+resetRow.Position             = UDim2.new(0,7,0,478)
+resetRow.BackgroundColor3     = Color3.fromRGB(200,50,50)
+resetRow.BackgroundTransparency = 0.3
+resetRow.ZIndex               = 4
+addCorner(resetRow, 8)
+addStroke(resetRow, Color3.fromRGB(255,80,80), 1, 0.5)
+
+local resetBtn = Instance.new("TextButton")
+resetBtn.Parent          = resetRow
+resetBtn.Size            = UDim2.new(1,0,1,0)
+resetBtn.BackgroundTransparency = 1
+resetBtn.Text            = "⚠️ Reset All Settings"
+resetBtn.TextColor3      = C.white
+resetBtn.Font            = Enum.Font.GothamBold
+resetBtn.TextSize        = isMobile and 11 or 12
+resetBtn.ZIndex          = 5
+
+resetBtn.Activated:Connect(function()
+    for key, setter in pairs(toggleSetters) do
+        setter(false, false)
     end
-})
+    selectedWave = "Easy"
+    wavePickBtn.Text = "Easy  ▼"
+    wavePickBtn.TextColor3 = C.dim
+    print("⚠️ All settings reset!")
+end)
 
-mainTab:AddToggle({
-    key = "autoFarm",
-    text = "Auto Farm",
-    default = false,
-    callback = function(val)
-        print("Auto Farm:", val)
+resetBtn.MouseEnter:Connect(function() resetRow.BackgroundTransparency = 0.15 end)
+resetBtn.MouseLeave:Connect(function() resetRow.BackgroundTransparency = 0.3  end)
+
+-- CREDITS
+local creditsLbl = Instance.new("TextLabel")
+creditsLbl.Parent             = scrollSettings
+creditsLbl.Size               = UDim2.new(1,-14,0,30)
+creditsLbl.Position           = UDim2.new(0,7,0,518)
+creditsLbl.BackgroundTransparency = 1
+creditsLbl.Text               = "Made with ❤️ by zeenixxs\nZeexHub v1.0"
+creditsLbl.TextColor3         = Color3.fromRGB(180,160,255)
+creditsLbl.TextTransparency   = 0.4
+creditsLbl.Font               = Enum.Font.Gotham
+creditsLbl.TextSize           = 9
+creditsLbl.TextYAlignment     = Enum.TextYAlignment.Top
+creditsLbl.ZIndex             = 4
+
+-- UPDATE CANVAS SIZE
+scrollSettings.CanvasSize = UDim2.new(0,0,0,560)
+
+-- ==========================================
+-- NAVIGATION
+-- ==========================================
+local function showTab(name)
+    scrollMain.Visible     = name == "main"
+    scrollMacro.Visible    = name == "macro"
+    scrollSettings.Visible = name == "settings"
+    -- закрыть все дропдауны
+    waveDD.Visible  = false
+    macroDD.Visible = false
+    if name ~= "settings" then
+        cfgDD.Visible = false
     end
-})
+end
 
-local combatTab = library:CreateTab("Combat", "⚔️")
-combatTab:AddLabel("「 Combat Settings 」")
+navMain.Activated:Connect(function()     showTab("main")     end)
+navMacro.Activated:Connect(function()    showTab("macro")    end)
+navSettings.Activated:Connect(function() showTab("settings") end)
 
-combatTab:AddToggle({
-    key = "aimbot",
-    text = "Aimbot",
-    default = false,
-    callback = function(val)
-        print("Aimbot:", val)
+-- ==========================================
+-- FOOTER
+-- ==========================================
+local footer = Instance.new("TextLabel")
+footer.Parent             = mainFrame
+footer.Size               = UDim2.new(1,0,0,FOOTER_H)
+footer.Position           = UDim2.new(0,0,1,-FOOTER_H)
+footer.BackgroundTransparency = 1
+footer.Text               = "⚡ zeexHub  by zeenixxs ⚡"
+footer.TextColor3         = Color3.fromRGB(200,180,255)
+footer.TextTransparency   = 0.35
+footer.Font               = Enum.Font.Gotham
+footer.TextSize           = 9
+footer.ZIndex             = 2
+
+-- ==========================================
+-- ЗАКРЫТИЕ ДРОПДАУНОВ ПРИ КЛИКЕ СНАРУЖИ
+-- ==========================================
+UserInputService.InputBegan:Connect(function(inp)
+    if inp.UserInputType ~= Enum.UserInputType.MouseButton1
+    and inp.UserInputType ~= Enum.UserInputType.Touch then return end
+    
+    local p = UserInputService:GetMouseLocation()
+    
+    local function outside(el)
+        if not el.Visible then return false end
+        local ep, es = el.AbsolutePosition, el.AbsoluteSize
+        return p.X < ep.X or p.X > ep.X+es.X or p.Y < ep.Y or p.Y > ep.Y+es.Y
     end
-})
-
-combatTab:AddToggle({
-    key = "esp",
-    text = "ESP",
-    default = false,
-    callback = function(val)
-        print("ESP:", val)
+    
+    if outside(waveDD) then
+        TweenService:Create(waveDD,TweenInfo.new(0.15),{Size=UDim2.new(0,120,0,0)}):Play()
+        task.delay(0.15, function() waveDD.Visible = false end)
     end
-})
+    
+    if outside(macroDD) then 
+        macroDD.Visible = false 
+    end
+    
+    if outside(cfgDD) then
+        TweenService:Create(cfgDD,TweenInfo.new(0.15),{Size=UDim2.new(1,-14,0,0)}):Play()
+        task.delay(0.15, function() cfgDD.Visible = false end)
+    end
+end)
 
-return library
+-- ==========================================
+-- KEYBOARD SHORTCUTS
+-- ==========================================
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    -- ESC - закрыть все дропдауны
+    if input.KeyCode == Enum.KeyCode.Escape then
+        waveDD.Visible = false
+        macroDD.Visible = false
+        cfgDD.Visible = false
+        createMacroWin.Visible = false
+    end
+    
+    -- INSERT - toggle main window
+    if input.KeyCode == Enum.KeyCode.Insert then
+        mainFrame.Visible = not mainFrame.Visible
+        tabBtn.Visible = not mainFrame.Visible
+    end
+    
+    -- F1 - quick toggle hotkey
+    if input.KeyCode == Enum.KeyCode.F1 and useHotkey then
+        isPlaying = not isPlaying
+        hotkeyBtn.BackgroundColor3 = isPlaying and Color3.fromRGB(220,40,40) or C.on
+        hotkeyBtn.Text = isPlaying and "⏸" or "▶"
+    end
+end)
+
+-- ==========================================
+-- AUTO SAVE (каждые 60 секунд)
+-- ==========================================
+task.spawn(function()
+    while true do
+        task.wait(60)
+        if toggleStates["AutoSave"] then
+            saveConfigs()
+            saveMacros()
+            print("💾 Auto-saved configs & macros")
+        end
+    end
+end)
+
+-- ==========================================
+-- INIT
+-- ==========================================
+loadMacros()
+loadConfigs()
+refreshMacroDD()
+refreshCfgDD()
+
+-- Применить дефолтные значения
+toggleSetters["AutoSave"](true, true)
+toggleSetters["Notifications"](true, true)
+toggleSetters["RainbowUI"](true, true)
+
+print("========================================")
+print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
+print("⚡ by zeenixxs")
+print("📋 Configs:", #configs, "| 📄 Macros:", #macros)
+print("========================================")
