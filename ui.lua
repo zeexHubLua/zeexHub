@@ -14,7 +14,7 @@ local isMobile = UserInputService.TouchEnabled and not UserInputService.MouseEna
 -- ==========================================
 -- КОНСТАНТЫ РАЗМЕРОВ
 -- ==========================================
-local W          = isMobile and 360  or 500
+local W          = isMobile and 300  or 200
 local H          = isMobile and 300  or 200  -- ← ТЕПЕРЬ 380 вместо 440
 local TITLE_H    = isMobile and 40   or 34
 local FOOTER_H   = 16
