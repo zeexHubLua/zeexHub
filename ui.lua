@@ -1576,10 +1576,11 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO FUNCTIONS - SMART SEARCH VERSION
+-- AUTO FUNCTIONS - REAL MOUSE SIMULATION
 -- ==========================================
 
 local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = game:GetService("Players").LocalPlayer
 local gui = player:WaitForChild("PlayerGui")
 
@@ -1599,21 +1600,20 @@ local function smartFindButtons()
     buttons.speed3 = nil
     
     for _, obj in pairs(gui:GetDescendants()) do
-        if obj:IsA("ImageButton") or obj:IsA("TextButton") then
+        if (obj:IsA("ImageButton") or obj:IsA("TextButton")) and obj.Visible then
             local name = obj.Name
             local parent = obj.Parent
+            local size = obj.AbsoluteSize
             
-            -- Поиск Skip (Button в Items, размер ~103x26)
+            -- Skip кнопка
             if name == "Button" and parent and parent.Name == "Items" then
-                local size = obj.AbsoluteSize
                 if size.X > 90 and size.X < 120 and size.Y > 20 and size.Y < 35 then
                     buttons.skip = obj
                 end
             end
             
-            -- Поиск Speed кнопок (name = "2" или "3", parent = Items, размер ~45x45)
+            -- Speed кнопки
             if parent and parent.Name == "Items" then
-                local size = obj.AbsoluteSize
                 if size.X > 40 and size.X < 55 and size.Y > 40 and size.Y < 55 then
                     if name == "2" then
                         buttons.speed2 = obj
@@ -1626,151 +1626,198 @@ local function smartFindButtons()
     end
 end
 
--- Первичный поиск
 smartFindButtons()
 
--- Функция ПРЯМОГО клика через все методы
-local function forceClick(button)
+-- ФУНКЦИЯ РЕАЛЬНОГО КЛИКА МЫШЬЮ
+local function realMouseClick(button)
     if not button or not button.Parent then return false end
     if not button.Visible then return false end
+    if button.AbsoluteSize.X == 0 or button.AbsoluteSize.Y == 0 then return false end
     
-    local clicked = false
+    local success = false
     
-    -- Метод 1: firesignal (самый надёжный)
+    -- Получаем центр кнопки
+    local pos = button.AbsolutePosition
+    local size = button.AbsoluteSize
+    local centerX = pos.X + (size.X / 2)
+    local centerY = pos.Y + (size.Y / 2)
+    
+    -- Метод 1: VirtualInputManager (самый реалистичный)
     pcall(function()
-        if button.MouseButton1Click then
-            firesignal(button.MouseButton1Click)
-            clicked = true
-        end
+        -- Двигаем "мышь" к центру кнопки
+        VirtualInputManager:SendMouseMoveEvent(centerX, centerY, game)
+        task.wait(0.05)
+        
+        -- Нажимаем левую кнопку мыши
+        VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 0)
+        task.wait(0.03)
+        
+        -- Отпускаем левую кнопку мыши
+        VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 0)
+        success = true
     end)
     
-    -- Метод 2: getconnections + Fire
-    if not clicked then
+    -- Метод 2: Прямая активация события (если VIM не работает)
+    if not success then
         pcall(function()
-            local connections = getconnections(button.MouseButton1Click)
-            for _, signal in pairs(connections) do
-                signal:Fire()
-                clicked = true
+            -- MouseButton1Down
+            for _, conn in pairs(getconnections(button.MouseButton1Down)) do
+                conn:Fire()
             end
-        end)
-    end
-    
-    -- Метод 3: Activated event
-    if not clicked then
-        pcall(function()
-            if button.Activated then
-                firesignal(button.Activated)
-                clicked = true
-            end
-        end)
-    end
-    
-    -- Метод 4: GuiButton (для некоторых эксплоитов)
-    if not clicked then
-        pcall(function()
-            local VirtualInputManager = game:GetService("VirtualInputManager")
-            local pos = button.AbsolutePosition
-            local size = button.AbsoluteSize
-            local center = Vector2.new(pos.X + size.X/2, pos.Y + size.Y/2)
-            VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, true, button, 0)
             task.wait(0.05)
-            VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, false, button, 0)
-            clicked = true
+            
+            -- MouseButton1Up
+            for _, conn in pairs(getconnections(button.MouseButton1Up)) do
+                conn:Fire()
+            end
+            task.wait(0.03)
+            
+            -- MouseButton1Click
+            for _, conn in pairs(getconnections(button.MouseButton1Click)) do
+                conn:Fire()
+            end
+            success = true
         end)
     end
     
-    return clicked
+    -- Метод 3: GuiButton (для Synapse/Wave)
+    if not success then
+        pcall(function()
+            local VirtualUser = game:GetService("VirtualUser")
+            VirtualUser:Button1Down(Vector2.new(centerX, centerY))
+            task.wait(0.05)
+            VirtualUser:Button1Up(Vector2.new(centerX, centerY))
+            success = true
+        end)
+    end
+    
+    -- Метод 4: firesignal (последняя попытка)
+    if not success then
+        pcall(function()
+            firesignal(button.MouseButton1Click)
+            success = true
+        end)
+    end
+    
+    return success
 end
 
--- Таймеры
-local lastSkip = 0
-local lastSpeed = 0
-local currentSpeed = 1
-local skipCooldown = 0.3
-local speedCooldown = 1.5
-
--- Определение текущей скорости
-local function detectCurrentSpeed()
-    -- Ищем текст "Game Speed: x2" или "x3" в UI
+-- Определение текущей скорости по UI
+local function getCurrentSpeed()
     for _, obj in pairs(gui:GetDescendants()) do
-        if obj:IsA("TextLabel") and obj.Text then
-            local text = obj.Text
-            if text:match("x3") or text:match("Speed.*3") then
-                return 3
-            elseif text:match("x2") or text:match("Speed.*2") then
-                return 2
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+            local text = (obj.Text or ""):lower()
+            if text:match("speed") then
+                if text:match("x3") or text:match(": 3") then
+                    return 3
+                elseif text:match("x2") or text:match(": 2") then
+                    return 2
+                elseif text:match("x1") or text:match(": 1") then
+                    return 1
+                end
             end
         end
     end
     return 1
 end
 
--- Переподключение кнопок каждые 5 секунд
-task.spawn(function()
-    while true do
-        task.wait(5)
-        if not buttons.skip or not buttons.skip.Parent or
-           not buttons.speed2 or not buttons.speed2.Parent then
-            smartFindButtons()
-        end
-    end
-end)
+-- Таймеры и состояние
+local lastSkipTime = 0
+local lastSpeedTime = 0
+local lastButtonRefresh = 0
+local currentSpeed = 1
+local skipAttempts = 0
+
+local SKIP_INTERVAL = 0.5
+local SPEED_INTERVAL = 2.0
+local BUTTON_REFRESH_INTERVAL = 5.0
+local MAX_SKIP_ATTEMPTS = 5
 
 -- Основной цикл
-local connection
-connection = RunService.Heartbeat:Connect(function()
+local heartbeatConnection
+heartbeatConnection = RunService.Heartbeat:Connect(function()
     local now = tick()
     
     -- Проверка существования toggleStates
     if not toggleStates then
-        connection:Disconnect()
+        heartbeatConnection:Disconnect()
         return
     end
     
+    -- Периодическое обновление кнопок
+    if now - lastButtonRefresh >= BUTTON_REFRESH_INTERVAL then
+        lastButtonRefresh = now
+        smartFindButtons()
+    end
+    
+    -- ============================================
     -- AUTO SKIP
+    -- ============================================
     if toggleStates["Auto Skip"] then
-        if now - lastSkip >= skipCooldown then
+        if now - lastSkipTime >= SKIP_INTERVAL then
+            lastSkipTime = now
+            
+            -- Обновляем кнопку если потеряна
             if not buttons.skip or not buttons.skip.Parent then
                 smartFindButtons()
             end
             
+            -- Кликаем если кнопка видна
             if buttons.skip and buttons.skip.Visible then
-                if forceClick(buttons.skip) then
-                    lastSkip = now
+                if skipAttempts < MAX_SKIP_ATTEMPTS then
+                    if realMouseClick(buttons.skip) then
+                        skipAttempts = skipAttempts + 1
+                        if toggleStates["Notifications"] then
+                            warn("⏭️ [AUTO SKIP] Clicked! (Attempt " .. skipAttempts .. ")")
+                        end
+                    end
+                end
+            else
+                -- Сбрасываем счётчик если кнопка исчезла
+                if skipAttempts > 0 then
+                    skipAttempts = 0
                     if toggleStates["Notifications"] then
-                        warn("⏭️ Auto Skip: Wave skipped")
+                        print("⏭️ [AUTO SKIP] Button hidden, resetting")
                     end
                 end
             end
         end
+    else
+        skipAttempts = 0
     end
     
-    -- AUTO SPEED
-    if now - lastSpeed >= speedCooldown then
-        local targetSpeed = 1
+    -- ============================================
+    -- AUTO SPEED (x2 / x3)
+    -- ============================================
+    if now - lastSpeedTime >= SPEED_INTERVAL then
+        lastSpeedTime = now
         
+        -- Определяем целевую скорость
+        local targetSpeed = 1
         if toggleStates["Auto x3 Speed"] then
             targetSpeed = 3
         elseif toggleStates["Auto x2 Speed"] then
             targetSpeed = 2
         end
         
+        -- Работаем только если нужна скорость > 1
         if targetSpeed > 1 then
-            currentSpeed = detectCurrentSpeed()
+            -- Читаем текущую скорость из UI
+            currentSpeed = getCurrentSpeed()
             
+            -- Кликаем только если скорость отличается
             if currentSpeed ~= targetSpeed then
-                -- Переподключаем кнопки если нужно
+                -- Обновляем кнопки если нужно
                 if not buttons.speed2 or not buttons.speed2.Parent then
                     smartFindButtons()
                 end
                 
                 local targetButton = (targetSpeed == 3) and buttons.speed3 or buttons.speed2
                 
-                if targetButton and targetButton.Parent then
-                    if forceClick(targetButton) then
-                        lastSpeed = now
+                if targetButton and targetButton.Parent and targetButton.Visible then
+                    if realMouseClick(targetButton) then
                         if toggleStates["Notifications"] then
-                            warn("⚡ Speed changed to x" .. targetSpeed)
+                            warn("⚡ [AUTO SPEED] Clicked x" .. targetSpeed .. " (was x" .. currentSpeed .. ")")
                         end
                         task.wait(0.2)
                         currentSpeed = targetSpeed
@@ -1781,22 +1828,49 @@ connection = RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Переподключение при смерти/респавне
+-- Переподключение при респавне
 player.CharacterAdded:Connect(function()
     task.wait(3)
     smartFindButtons()
     currentSpeed = 1
-    lastSkip = 0
-    lastSpeed = 0
+    skipAttempts = 0
+    lastSkipTime = 0
+    lastSpeedTime = 0
+    warn("🔄 [AUTO] Character respawned, buttons refreshed")
 end)
 
--- Переподключение при изменении GUI
+-- Отслеживание появления новых UI элементов
 gui.DescendantAdded:Connect(function(obj)
-    if obj.Name == "Button" or obj.Name == "2" or obj.Name == "3" then
-        task.wait(0.5)
-        smartFindButtons()
+    if obj:IsA("ImageButton") or obj:IsA("TextButton") then
+        if obj.Name == "Button" or obj.Name == "2" or obj.Name == "3" then
+            task.wait(0.5)
+            smartFindButtons()
+        end
     end
 end)
+
+-- Начальный лог
+task.wait(1)
+print("========================================")
+print("✅ AUTO FUNCTIONS LOADED (REAL CLICK MODE)")
+print("========================================")
+print("🔍 Button Status:")
+print("   Skip:", buttons.skip and "✓ Found" or "✗ Not Found")
+print("   Speed x2:", buttons.speed2 and "✓ Found" or "✗ Not Found")
+print("   Speed x3:", buttons.speed3 and "✓ Found" or "✗ Not Found")
+print("========================================")
+print("⚙️ Settings:")
+print("   Skip Interval:", SKIP_INTERVAL, "sec")
+print("   Speed Check:", SPEED_INTERVAL, "sec")
+print("   Max Skip Attempts:", MAX_SKIP_ATTEMPTS)
+print("========================================")
+
+-- Debug информация о кнопках
+if buttons.skip then
+    print("📍 Skip Button Info:")
+    print("   Position:", math.floor(buttons.skip.AbsolutePosition.X) .. "," .. math.floor(buttons.skip.AbsolutePosition.Y))
+    print("   Size:", math.floor(buttons.skip.AbsoluteSize.X) .. "x" .. math.floor(buttons.skip.AbsoluteSize.Y))
+end
 
 print("========================================")
 print("✅ AUTO FUNCTIONS ACTIVE")
