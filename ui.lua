@@ -321,6 +321,7 @@ end
 local navMain     = navBtn("MAIN",  8)
 local navMacro    = navBtn("MACRO", 38)
 local navSettings = navBtn("SET",   68)
+local navChannels = navBtn("CHAN",  98)
 
 -- ==========================================
 -- CONTENT AREA
@@ -354,6 +355,7 @@ end
 local scrollMain     = makeScroll(true,  480)
 local scrollMacro    = makeScroll(false, 480)
 local scrollSettings = makeScroll(false, 620)
+local scrollChannels = makeScroll(false, 330)
 
 -- ==========================================
 -- TOGGLE FACTORY
@@ -908,6 +910,189 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ==========================================
+-- ВКЛАДКА: CHANNELS
+-- ==========================================
+sectionTitle(scrollChannels, "📢 КАНАЛЫ", 4)
+
+-- TG CHANNEL BUTTON (с RGB обводкой)
+local tgBtn = Instance.new("TextButton")
+tgBtn.Parent          = scrollChannels
+tgBtn.Size            = UDim2.new(1, -14, 0, 60)
+tgBtn.Position        = UDim2.new(0, 7, 0, 32)
+tgBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+tgBtn.BackgroundTransparency = 0.1
+tgBtn.Text            = ""
+tgBtn.ZIndex          = 4
+tgBtn.AutoButtonColor = false
+addCorner(tgBtn, 12)
+
+-- RGB STROKE ДЛЯ КНОПКИ
+local tgStroke = addStroke(tgBtn, C.accent, 3)
+local tgHue = 0
+RunService.RenderStepped:Connect(function()
+    tgHue = (tgHue + 0.008) % 1
+    tgStroke.Color = Color3.fromHSV(tgHue, 1, 1)
+end)
+
+-- ANIME STICKER 1 (слева)
+local sticker1 = Instance.new("TextLabel")
+sticker1.Parent             = tgBtn
+sticker1.Size               = UDim2.new(0, 50, 1, 0)
+sticker1.Position           = UDim2.new(0, 8, 0, 0)
+sticker1.BackgroundTransparency = 1
+sticker1.Text               = "💜✨"
+sticker1.TextColor3         = Color3.fromRGB(255, 150, 255)
+sticker1.Font               = Enum.Font.GothamBold
+sticker1.TextSize           = 28
+sticker1.ZIndex             = 5
+
+-- MAIN TEXT
+local tgText = Instance.new("TextLabel")
+tgText.Parent             = tgBtn
+tgText.Size               = UDim2.new(1, -120, 1, 0)
+tgText.Position           = UDim2.new(0, 60, 0, 0)
+tgText.BackgroundTransparency = 1
+tgText.Text               = "TG Channel ZeexHub"
+tgText.TextColor3         = C.white
+tgText.Font               = Enum.Font.GothamBold
+tgText.TextSize           = isMobile and 16 or 18
+tgText.ZIndex             = 5
+
+-- ANIME STICKER 2 (справа)
+local sticker2 = Instance.new("TextLabel")
+sticker2.Parent             = tgBtn
+sticker2.Size               = UDim2.new(0, 50, 1, 0)
+sticker2.Position           = UDim2.new(1, -58, 0, 0)
+sticker2.BackgroundTransparency = 1
+sticker2.Text               = "✨💜"
+sticker2.TextColor3         = Color3.fromRGB(255, 150, 255)
+sticker2.Font               = Enum.Font.GothamBold
+sticker2.TextSize           = 28
+sticker2.ZIndex             = 5
+
+-- HOVER EFFECT
+tgBtn.MouseEnter:Connect(function()
+    TweenService:Create(tgBtn, TweenInfo.new(0.2), {BackgroundTransparency = 0}):Play()
+    TweenService:Create(tgText, TweenInfo.new(0.2), {TextSize = isMobile and 17 or 19}):Play()
+end)
+
+tgBtn.MouseLeave:Connect(function()
+    TweenService:Create(tgBtn, TweenInfo.new(0.2), {BackgroundTransparency = 0.1}):Play()
+    TweenService:Create(tgText, TweenInfo.new(0.2), {TextSize = isMobile and 16 or 18}):Play()
+end)
+
+-- CLICK TO OPEN TG
+tgBtn.Activated:Connect(function()
+    local url = "https://t.me/zeenixs"
+    
+    -- Попытка скопировать в буфер обмена
+    if setclipboard then
+        setclipboard(url)
+        print("📋 Ссылка скопирована:", url)
+        
+        -- Уведомление
+        tgText.Text = "✅ Скопировано!"
+        tgText.TextColor3 = C.on
+        task.wait(1.5)
+        tgText.Text = "TG Channel ZeexHub"
+        tgText.TextColor3 = C.white
+    else
+        print("❌ setclipboard не поддерживается")
+        print("📱 Открой вручную:", url)
+    end
+    
+    -- Попытка открыть браузер (не работает в большинстве эксплоитов)
+    pcall(function()
+        game:GetService("GuiService"):OpenBrowserWindow(url)
+    end)
+end)
+
+-- DESCRIPTION
+local descLbl = Instance.new("TextLabel")
+descLbl.Parent             = scrollChannels
+descLbl.Size               = UDim2.new(1, -14, 0, 40)
+descLbl.Position           = UDim2.new(0, 7, 0, 100)
+descLbl.BackgroundTransparency = 1
+descLbl.Text               = "Подпишись на наш Telegram канал!\nПолучай обновления и новости первым 🚀"
+descLbl.TextColor3         = Color3.fromRGB(180, 180, 220)
+descLbl.Font               = Enum.Font.Gotham
+descLbl.TextSize           = 11
+descLbl.TextWrapped        = true
+descLbl.TextYAlignment     = Enum.TextYAlignment.Top
+descLbl.ZIndex             = 4
+
+-- SEPARATOR
+local chanSep = Instance.new("Frame")
+chanSep.Parent          = scrollChannels
+chanSep.Size            = UDim2.new(1, -14, 0, 1)
+chanSep.Position        = UDim2.new(0, 7, 0, 148)
+chanSep.BackgroundColor3 = C.accent
+chanSep.BackgroundTransparency = 0.7
+chanSep.BorderSizePixel = 0
+chanSep.ZIndex          = 4
+
+-- SECOND SECTION (опционально — Discord, YouTube и т.д.)
+sectionTitle(scrollChannels, "🌐 ДРУГИЕ ССЫЛКИ", 158)
+
+local function socialBtn(text, emoji, yPos, url)
+    local btn = Instance.new("TextButton")
+    btn.Parent          = scrollChannels
+    btn.Size            = UDim2.new(1, -14, 0, 40)
+    btn.Position        = UDim2.new(0, 7, 0, yPos)
+    btn.BackgroundColor3 = C.panel
+    btn.BackgroundTransparency = 0.3
+    btn.Text            = ""
+    btn.ZIndex          = 4
+    addCorner(btn, 8)
+    addStroke(btn, C.accent, 1, 0.6)
+    
+    local iconLbl = Instance.new("TextLabel")
+    iconLbl.Parent             = btn
+    iconLbl.Size               = UDim2.new(0, 40, 1, 0)
+    iconLbl.Position           = UDim2.new(0, 8, 0, 0)
+    iconLbl.BackgroundTransparency = 1
+    iconLbl.Text               = emoji
+    iconLbl.TextColor3         = C.white
+    iconLbl.Font               = Enum.Font.GothamBold
+    iconLbl.TextSize           = 20
+    iconLbl.ZIndex             = 5
+    
+    local textLbl = Instance.new("TextLabel")
+    textLbl.Parent             = btn
+    textLbl.Size               = UDim2.new(1, -56, 1, 0)
+    textLbl.Position           = UDim2.new(0, 48, 0, 0)
+    textLbl.BackgroundTransparency = 1
+    textLbl.Text               = text
+    textLbl.TextColor3         = C.white
+    textLbl.Font               = Enum.Font.GothamBold
+    textLbl.TextSize           = 12
+    textLbl.TextXAlignment     = Enum.TextXAlignment.Left
+    textLbl.ZIndex             = 5
+    
+    btn.MouseEnter:Connect(function() btn.BackgroundTransparency = 0.1 end)
+    btn.MouseLeave:Connect(function() btn.BackgroundTransparency = 0.3 end)
+    
+    btn.Activated:Connect(function()
+        if setclipboard then
+            setclipboard(url)
+            textLbl.Text = "✅ Скопировано!"
+            textLbl.TextColor3 = C.on
+            task.wait(1.2)
+            textLbl.Text = text
+            textLbl.TextColor3 = C.white
+        end
+    end)
+    
+    return btn
+end
+
+-- ПРИМЕРЫ (можешь добавить свои)
+socialBtn("Discord Server", "💬", 186, "https://discord.gg/yourserver")
+socialBtn("YouTube Channel", "📺", 232, "https://youtube.com/@yourchannel")
+socialBtn("GitHub Repo", "⭐", 278, "https://github.com/yourrepo")
+
+-- ==========================================
+-- ==========================================
 -- ВКЛАДКА: SETTINGS (С ПОЛНЫМИ ИСПРАВЛЕНИЯМИ)
 -- ==========================================
 sectionTitle(scrollSettings, "⚡ SETTINGS", 4)
@@ -1326,6 +1511,7 @@ local function showTab(name)
     scrollMain.Visible     = name == "main"
     scrollMacro.Visible    = name == "macro"
     scrollSettings.Visible = name == "settings"
+    scrollChannels.Visible = name == "channels"
     -- закрыть все дропдауны
     waveDD.Visible  = false
     macroDD.Visible = false
@@ -1337,6 +1523,7 @@ end
 navMain.Activated:Connect(function()     showTab("main")     end)
 navMacro.Activated:Connect(function()    showTab("macro")    end)
 navSettings.Activated:Connect(function() showTab("settings") end)
+navChannels.Activated:Connect(function() showTab("channels") end)
 
 -- ==========================================
 -- FOOTER
