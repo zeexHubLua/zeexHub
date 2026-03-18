@@ -1576,7 +1576,7 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - ПРАВИЛЬНАЯ ВЕРСИЯ
+-- AUTO SKIP - БЕЗ СПАМА
 -- ==========================================
 
 local GuiService = game:GetService("GuiService")
@@ -1586,28 +1586,18 @@ local gui = player:WaitForChild("PlayerGui")
 
 task.wait(3)
 
--- Ищем кнопку Auto Skip В ИГРЕ (не в нашем GUI!)
+-- Ищем кнопку Auto Skip В ИГРЕ
 local function findGameAutoSkipButton()
     for _, descendant in pairs(gui:GetDescendants()) do
-        -- Ищем TextLabel с текстом "Auto Skip"
         if descendant:IsA("TextLabel") and descendant.Text == "Auto Skip" then
-            -- Проверяем что это НЕ наш GUI
             if not descendant:IsDescendantOf(screenGui) then
                 local parent = descendant.Parent
                 if parent then
-                    -- Ищем кнопку рядом (обычно TextButton с текстом On/Off)
                     for _, child in pairs(parent:GetChildren()) do
-                        if child:IsA("TextButton") then
-                            -- Проверяем что это кнопка переключатель
-                            if child.Text == "Off" or child.Text == "On" then
+                        if child:IsA("TextButton") or child:IsA("ImageButton") then
+                            if child.Text == "Off" or child.Text == "On" or child.Text == "" then
                                 return child
                             end
-                        end
-                    end
-                    -- Альтернативно ищем ImageButton
-                    for _, child in pairs(parent:GetChildren()) do
-                        if child:IsA("ImageButton") or (child:IsA("TextButton") and child.Text == "") then
-                            return child
                         end
                     end
                 end
@@ -1617,20 +1607,17 @@ local function findGameAutoSkipButton()
     return nil
 end
 
--- Проверка состояния (On или Off)
+-- Проверка состояния (Off или On)
 local function isButtonOff(button)
     if not button then return false end
     
-    -- Способ 1: Проверка текста
     if button.Text == "Off" then
         return true
     end
     
-    -- Способ 2: Проверка по цвету (обычно Off = серый)
     if button.BackgroundColor3 then
-        local color = button.BackgroundColor3
-        -- Серый цвет (примерно)
-        if color.R < 0.5 and color.G < 0.5 and color.B < 0.5 then
+        local c = button.BackgroundColor3
+        if c.R < 0.5 and c.G < 0.5 and c.B < 0.5 then
             return true
         end
     end
@@ -1638,19 +1625,18 @@ local function isButtonOff(button)
     return false
 end
 
--- КЛИК через getconnections
+-- КЛИК
 local function clickButton(button)
-    if not button or not button.Parent then return false end
-    if not button.Visible then return false end
+    if not button or not button.Parent or not button.Visible then
+        return false
+    end
     
     local success = false
     
-    -- Делаем кнопку активной
     button.Active = true
     button.Selectable = true
     
     pcall(function()
-        -- Фаерим все события
         for _, conn in pairs(getconnections(button.Activated)) do
             conn:Fire()
             success = true
@@ -1660,94 +1646,79 @@ local function clickButton(button)
             conn:Fire()
             success = true
         end
-        
-        for _, conn in pairs(getconnections(button.MouseButton1Down)) do
-            conn:Fire()
-        end
-        
-        task.wait(0.03)
-        
-        for _, conn in pairs(getconnections(button.MouseButton1Up)) do
-            conn:Fire()
-        end
     end)
     
     return success
 end
 
--- Состояние
+-- СОСТОЯНИЯ
 local autoSkipButton = nil
-local lastCheck = 0
-local isWaiting = false
-local CHECK_INTERVAL = 1.0
+local lastState = nil  -- Храним последнее состояние (true = On, false = Off)
+local lastAction = 0
+local CHECK_INTERVAL = 1.5
 
 -- Главный цикл
 local conn
 conn = RunService.Heartbeat:Connect(function()
-    if not toggleStates then
-        conn:Disconnect()
-        return
-    end
-    
-    -- Работаем только если включён Auto Skip в НАШЕМ GUI
-    if not toggleStates["Auto Skip"] then
-        isWaiting = false
+    if not toggleStates or not toggleStates["Auto Skip"] then
+        lastState = nil
         return
     end
     
     local now = tick()
     
-    -- Проверка каждую секунду
-    if now - lastCheck >= CHECK_INTERVAL then
-        lastCheck = now
+    if now - lastAction < CHECK_INTERVAL then
+        return
+    end
+    
+    lastAction = now
+    
+    -- Ищем кнопку
+    if not autoSkipButton or not autoSkipButton.Parent then
+        autoSkipButton = findGameAutoSkipButton()
+        lastState = nil
         
-        -- Ищем кнопку в игре
-        if not autoSkipButton or not autoSkipButton.Parent then
-            autoSkipButton = findGameAutoSkipButton()
-            
-            if autoSkipButton and toggleStates["Notifications"] then
-                print("🔍 [AUTO SKIP] Кнопка найдена:", autoSkipButton:GetFullName())
-            end
-        end
-        
-        if autoSkipButton and autoSkipButton.Visible then
-            -- Проверяем состояние
-            if isButtonOff(autoSkipButton) then
-                -- Кнопка выключена - ВКЛЮЧАЕМ
-                if not isWaiting then
-                    if clickButton(autoSkipButton) then
-                        isWaiting = true
-                        
-                        if toggleStates["Notifications"] then
-                            warn("⏭️ [AUTO SKIP] Включён! Жду выключения...")
-                        end
-                    end
-                end
-            else
-                -- Кнопка включена - ЖДЁМ
-                if isWaiting then
-                    if toggleStates["Notifications"] then
-                        print("✅ [AUTO SKIP] Кнопка включена, ожидаю...")
-                    end
-                end
-                isWaiting = false
-            end
-        else
-            isWaiting = false
+        if autoSkipButton and toggleStates["Notifications"] then
+            print("🔍 [AUTO SKIP] Найдена кнопка")
         end
     end
-end)
-
--- Обновление при изменении GUI
-gui.DescendantAdded:Connect(function(obj)
-    task.wait(0.5)
-    autoSkipButton = findGameAutoSkipButton()
-end)
-
-gui.DescendantRemoving:Connect(function(obj)
-    if obj == autoSkipButton then
-        autoSkipButton = nil
-        isWaiting = false
+    
+    if not autoSkipButton or not autoSkipButton.Visible then
+        return
+    end
+    
+    -- Проверяем текущее состояние
+    local currentState = not isButtonOff(autoSkipButton)  -- true = On, false = Off
+    
+    -- УСЛОВИЕ: кликаем ТОЛЬКО если состояние изменилось с On на Off
+    if lastState == true and currentState == false then
+        -- Кнопка была On, теперь Off — ВКЛЮЧАЕМ
+        if clickButton(autoSkipButton) then
+            if toggleStates["Notifications"] then
+                warn("⏭️ [AUTO SKIP] Включён (было Off)")
+            end
+            lastState = true  -- Предполагаем что включили
+        end
+    elseif lastState == nil then
+        -- Первая проверка — сразу включаем если Off
+        if currentState == false then
+            if clickButton(autoSkipButton) then
+                if toggleStates["Notifications"] then
+                    warn("⏭️ [AUTO SKIP] Включён (первый раз)")
+                end
+                lastState = true
+            end
+        else
+            lastState = true
+        end
+    else
+        -- Просто обновляем состояние
+        if lastState ~= currentState then
+            if toggleStates["Notifications"] then
+                print(string.format("🔄 [AUTO SKIP] Состояние: %s", currentState and "On" or "Off"))
+            end
+            lastState = currentState
+        end
     end
 end)
 
@@ -1755,15 +1726,14 @@ end)
 player.CharacterAdded:Connect(function()
     task.wait(3)
     autoSkipButton = nil
-    isWaiting = false
-    lastCheck = 0
+    lastState = nil
+    lastAction = 0
 end)
 
 print("========================================")
-print("✅ AUTO SKIP READY")
-print("   Ищет кнопку Auto Skip в игре")
-print("   Тыкает 1 раз когда Off")
-print("   Ждёт пока не выключится снова")
+print("✅ AUTO SKIP LOADED (NO SPAM)")
+print("   Кликает только при Off -> On")
+print("   Интервал проверки:", CHECK_INTERVAL, "сек")
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
