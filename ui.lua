@@ -549,7 +549,37 @@ end)
 -- ==========================================
 -- ВКЛАДКА: MACRO
 -- ==========================================
+
+-- ==========================================
+-- ВКЛАДКА: MACRO (ПОЛНОСТЬЮ ИСПРАВЛЕННАЯ)
+-- ==========================================
 sectionTitle(scrollMacro, "⚡ MACRO", 4)
+
+-- TOGGLES СВЕРХУ
+makeToggle(scrollMacro, "Record Macro",   "⏺ Record Macro",   28,  function(v) isRecording = v end)
+makeToggle(scrollMacro, "Play Macro",     "▶ Play Macro",      65,  function(v)
+    isPlaying = v
+    if useHotkey then hotkeyBtn.Visible = v end
+end)
+makeToggle(scrollMacro, "Time Placement", "⏱ Time Placement",  102, function(v) end)
+makeToggle(scrollMacro, "Loop Mode",      "🔁 Loop Mode",       139, function(v) loopMode = v end)
+makeToggle(scrollMacro, "Hotkey",         "⌨ Hotkey",          176, function(v)
+    useHotkey = v
+    hotkeyBtn.Visible = v and isPlaying
+end)
+
+-- SEPARATOR
+local macroSep = Instance.new("Frame")
+macroSep.Parent          = scrollMacro
+macroSep.Size            = UDim2.new(1,-14,0,1)
+macroSep.Position        = UDim2.new(0,7,0,216)
+macroSep.BackgroundColor3 = C.accent
+macroSep.BackgroundTransparency = 0.7
+macroSep.BorderSizePixel = 0
+macroSep.ZIndex          = 4
+
+-- SECTION TITLE
+sectionTitle(scrollMacro, "📁 MACRO FILES", 224)
 
 -- Small action buttons
 local function smallBtn(parent, text, x, y, w, h)
@@ -569,18 +599,19 @@ local function smallBtn(parent, text, x, y, w, h)
     return b
 end
 
-local mCreateBtn  = smallBtn(scrollMacro, "📁 Create",  7, 28, 90, 26)
-local mRefreshBtn = smallBtn(scrollMacro, "🔄 Refresh", 7, 58, 90, 26)
+local mCreateBtn  = smallBtn(scrollMacro, "📁 Create",  7, 248, 90, 26)
+local mRefreshBtn = smallBtn(scrollMacro, "🔄 Refresh", 7, 278, 90, 26)
 
 -- LIST LABEL
 local listFrame = Instance.new("Frame")
 listFrame.Parent          = scrollMacro
 listFrame.Size            = UDim2.new(0,90,0,26)
-listFrame.Position        = UDim2.new(0,7,0,88)
+listFrame.Position        = UDim2.new(0,7,0,308)
 listFrame.BackgroundColor3 = C.btn
 listFrame.BackgroundTransparency = 0.2
 listFrame.ZIndex          = 4
 addCorner(listFrame, 6)
+
 local listFrameLbl = Instance.new("TextLabel")
 listFrameLbl.Parent             = listFrame
 listFrameLbl.Size               = UDim2.new(1,0,1,0)
@@ -591,11 +622,11 @@ listFrameLbl.Font               = Enum.Font.GothamBold
 listFrameLbl.TextSize           = 10
 listFrameLbl.ZIndex             = 5
 
--- MACRO SELECTOR
+-- MACRO SELECTOR BUTTON
 local macroSelBtn = Instance.new("TextButton")
 macroSelBtn.Parent          = scrollMacro
 macroSelBtn.Size            = UDim2.new(1,-104,0,26)
-macroSelBtn.Position        = UDim2.new(0,100,0,220)
+macroSelBtn.Position        = UDim2.new(0,100,0,308)
 macroSelBtn.BackgroundColor3 = C.panel
 macroSelBtn.BackgroundTransparency = 0.3
 macroSelBtn.Text            = ""
@@ -628,15 +659,14 @@ macroSelArrow.ZIndex             = 5
 macroSelBtn.MouseEnter:Connect(function() macroSelBtn.BackgroundTransparency = 0.1 end)
 macroSelBtn.MouseLeave:Connect(function() macroSelBtn.BackgroundTransparency = 0.3 end)
 
--- MACRO DROPDOWN
+-- MACRO DROPDOWN (в screenGui для перекрытия всего)
 local macroDD = Instance.new("ScrollingFrame")
-macroDD.Parent               = screenGui  -- ← ИЗМЕНЕНО: было scrollMacro
+macroDD.Parent               = screenGui
 macroDD.Size                 = UDim2.new(0, CONTENT_W - 104, 0, 0)
-macroDD.Position             = UDim2.new(0, mainFrame.AbsolutePosition.X + CONTENT_X + 100, 0, mainFrame.AbsolutePosition.Y + CONTENT_Y + 117)
 macroDD.BackgroundColor3     = C.bg
 macroDD.BackgroundTransparency = 0.05
 macroDD.Visible              = false
-macroDD.ZIndex               = 200  -- ← ИЗМЕНЕНО: было 45
+macroDD.ZIndex               = 200
 macroDD.ScrollBarThickness   = 3
 macroDD.ScrollBarImageColor3 = C.accent
 macroDD.BorderSizePixel      = 0
@@ -644,57 +674,114 @@ macroDD.ClipsDescendants     = true
 addCorner(macroDD, 8)
 addStroke(macroDD, C.accent, 2)
 
+-- Функция обновления позиции dropdown
+local function updateMacroDropdownPos()
+    local btnPos = macroSelBtn.AbsolutePosition
+    macroDD.Position = UDim2.new(0, btnPos.X, 0, btnPos.Y + 29)
+end
+
+-- Refresh Macro Dropdown
 local function refreshMacroDD()
     for _, ch in pairs(macroDD:GetChildren()) do
-        if ch:IsA("TextButton") then ch:Destroy() end
+        if ch:IsA("Frame") then ch:Destroy() end
     end
+    
     for i, mac in ipairs(macros) do
-        local item = Instance.new("TextButton")
-        item.Parent          = macroDD
-        item.Size            = UDim2.new(1,-8,0,26)
-        item.Position        = UDim2.new(0,4,0,(i-1)*30+4)
-        item.BackgroundColor3 = C.panel
-        item.BackgroundTransparency = 0.4
-        item.Text            = "📄 "..mac.name
-        item.TextColor3      = C.white
-        item.Font            = Enum.Font.GothamBold
-        item.TextSize        = 10
-        item.TextXAlignment  = Enum.TextXAlignment.Left
-        item.ZIndex          = 201
-        addCorner(item, 5)
+        local isSel = (mac.name == selectedMacro)
+        
+        local itemFrame = Instance.new("Frame")
+        itemFrame.Parent          = macroDD
+        itemFrame.Size            = UDim2.new(1,-8,0,30)
+        itemFrame.Position        = UDim2.new(0,4,0,(i-1)*34+4)
+        itemFrame.BackgroundColor3 = isSel and Color3.fromRGB(88, 101, 242) or C.panel
+        itemFrame.BackgroundTransparency = isSel and 0.05 or 0.4
+        itemFrame.ZIndex          = 201
+        addCorner(itemFrame, 5)
+        
+        local itemBtn = Instance.new("TextButton")
+        itemBtn.Parent          = itemFrame
+        itemBtn.Size            = UDim2.new(1,-40,1,0)
+        itemBtn.Position        = UDim2.new(0,0,0,0)
+        itemBtn.BackgroundTransparency = 1
+        itemBtn.Text            = "📄 "..mac.name
+        itemBtn.TextColor3      = isSel and C.on or C.white
+        itemBtn.Font            = Enum.Font.GothamBold
+        itemBtn.TextSize        = 10
+        itemBtn.TextXAlignment  = Enum.TextXAlignment.Left
+        itemBtn.ZIndex          = 202
+        
+        local padding = Instance.new("UIPadding")
+        padding.PaddingLeft = UDim.new(0,8)
+        padding.Parent = itemBtn
+        
+        -- DELETE BUTTON
+        local deleteBtn = Instance.new("TextButton")
+        deleteBtn.Parent          = itemFrame
+        deleteBtn.Size            = UDim2.new(0,32,0,22)
+        deleteBtn.Position        = UDim2.new(1,-34,0.5,-11)
+        deleteBtn.BackgroundColor3 = C.danger
+        deleteBtn.Text            = "🗑"
+        deleteBtn.TextColor3      = C.white
+        deleteBtn.Font            = Enum.Font.GothamBold
+        deleteBtn.TextSize        = 12
+        deleteBtn.ZIndex          = 203
+        addCorner(deleteBtn, 5)
+        
         local n = mac.name
-        item.Activated:Connect(function()
+        
+        -- SELECT MACRO
+        itemBtn.Activated:Connect(function()
             selectedMacro       = n
             macroSelLbl.Text    = "📄 "..n
             macroSelLbl.TextColor3 = C.on
             macroDD.Visible     = false
+            refreshMacroDD()
         end)
-        item.MouseEnter:Connect(function() item.BackgroundTransparency = 0.15 end)
-        item.MouseLeave:Connect(function() item.BackgroundTransparency = 0.4  end)
+        
+        -- DELETE MACRO
+        deleteBtn.Activated:Connect(function()
+            for idx, m in ipairs(macros) do
+                if m.name == n then
+                    table.remove(macros, idx)
+                    break
+                end
+            end
+            if selectedMacro == n then
+                selectedMacro = nil
+                macroSelLbl.Text = "Выберите макрос..."
+                macroSelLbl.TextColor3 = C.dim
+            end
+            saveMacros()
+            refreshMacroDD()
+            print("🗑 Macro deleted:", n)
+        end)
+        
+        itemBtn.MouseEnter:Connect(function() 
+            if selectedMacro ~= mac.name then 
+                itemFrame.BackgroundTransparency = 0.2 
+            end 
+        end)
+        itemBtn.MouseLeave:Connect(function() 
+            if selectedMacro ~= mac.name then 
+                itemFrame.BackgroundTransparency = 0.4 
+            end 
+        end)
     end
-    macroDD.CanvasSize = UDim2.new(0,0,0,#macros*30+8)
+    
+    macroDD.CanvasSize = UDim2.new(0,0,0,#macros*34+8)
 end
 
+-- Toggle Dropdown
 macroSelBtn.Activated:Connect(function()
-    refreshMacroDD()
     if macroDD.Visible then
         macroDD.Visible = false
     else
+        refreshMacroDD()
+        updateMacroDropdownPos()
         macroDD.Visible = true
+        local targetH = math.min(#macros*34+8, 150)
+        macroDD.Size = UDim2.new(0, CONTENT_W - 104, 0, targetH)
     end
-end)
-
--- WIDE TOGGLES (MACRO)
-makeToggle(scrollMacro, "Record Macro",   "⏺ Record Macro",   28, function(v) isRecording = v end)
-makeToggle(scrollMacro, "Play Macro",     "▶ Play Macro",      65, function(v)
-    isPlaying = v
-    if useHotkey then hotkeyBtn.Visible = v end
-end)
-makeToggle(scrollMacro, "Time Placement", "⏱ Time Placement",  102, function(v) end)
-makeToggle(scrollMacro, "Loop Mode",      "🔁 Loop Mode",       139, function(v) loopMode = v end)
-makeToggle(scrollMacro, "Hotkey",         "⌨ Hotkey",          176, function(v)
-    useHotkey = v
-    hotkeyBtn.Visible = v and isPlaying
 end)
 
 -- CREATE MACRO WINDOW
@@ -705,74 +792,21 @@ createMacroWin.Position        = UDim2.new(0.5,-135,0.5,-69)
 createMacroWin.BackgroundColor3 = C.bg
 createMacroWin.BackgroundTransparency = 0.05
 createMacroWin.Visible         = false
-createMacroWin.ZIndex          = 50
+createMacroWin.ZIndex          = 250
 addCorner(createMacroWin, 12)
 addStroke(createMacroWin, C.accent, 3)
 
-local function popupTitle(win, text)
-    local l = Instance.new("TextLabel")
-    l.Parent             = win
-    l.Size               = UDim2.new(1,-16,0,26)
-    l.Position           = UDim2.new(0,8,0,8)
-    l.BackgroundTransparency = 1
-    l.Text               = text
-    l.TextColor3         = C.white
-    l.Font               = Enum.Font.GothamBold
-    l.TextSize           = 13
-    l.TextXAlignment     = Enum.TextXAlignment.Left
-    l.ZIndex             = 51
-end
-
-local function popupBox(win, placeholder)
-    local box = Instance.new("TextBox")
-    box.Parent          = win
-    box.Size            = UDim2.new(1,-20,0,30)
-    box.Position        = UDim2.new(0,10,0,40)
-    box.BackgroundColor3 = C.panel
-    box.BackgroundTransparency = 0.2
-    box.Text            = ""
-    box.PlaceholderText = placeholder
-    box.TextColor3      = C.white
-    box.PlaceholderColor3 = C.dim
-    box.Font            = Enum.Font.Gotham
-    box.TextSize        = 12
-    box.ZIndex          = 51
-    addCorner(box, 7)
-    return box
-end
-
-local function popupBtns(win, onConfirm, onCancel)
-    local confirm = Instance.new("TextButton")
-    confirm.Parent          = win
-    confirm.Size            = UDim2.new(0,110,0,28)
-    confirm.Position        = UDim2.new(0,10,1,-38)
-    confirm.BackgroundColor3 = C.on
-    confirm.Text            = "✓ SAVE"
-    confirm.TextColor3      = C.white
-    confirm.Font            = Enum.Font.GothamBold
-    confirm.TextSize        = 12
-    confirm.ZIndex          = 51
-    addCorner(confirm, 7)
-
-    local cancel = Instance.new("TextButton")
-    cancel.Parent          = win
-    cancel.Size            = UDim2.new(0,110,0,28)
-    cancel.Position        = UDim2.new(1,-120,1,-38)
-    cancel.BackgroundColor3 = C.danger
-    cancel.Text            = "✕ CANCEL"
-    cancel.TextColor3      = C.white
-    cancel.Font            = Enum.Font.GothamBold
-    cancel.TextSize        = 12
-    cancel.ZIndex          = 51
-    addCorner(cancel, 7)
-
-    confirm.Activated:Connect(onConfirm)
-    cancel.Activated:Connect(onCancel)
-    return confirm, cancel
-end
-
 popupTitle(createMacroWin, "📁 CREATE MACRO")
 local macroNameBox = popupBox(createMacroWin, "Название макроса...")
+
+-- Fix ZIndex для popup элементов
+macroNameBox.ZIndex = 251
+for _, child in pairs(createMacroWin:GetDescendants()) do
+    if child:IsA("GuiObject") then
+        child.ZIndex = math.max(child.ZIndex, 251)
+    end
+end
+
 popupBtns(createMacroWin,
     function()
         local n = macroNameBox.Text
@@ -782,6 +816,7 @@ popupBtns(createMacroWin,
             macroNameBox.Text = ""
             refreshMacroDD()
             saveMacros()
+            print("✅ Macro created:", n)
         end
     end,
     function()
@@ -794,7 +829,20 @@ mCreateBtn.Activated:Connect(function()
     createMacroWin.Visible = true
     macroNameBox.Text = ""
 end)
-mRefreshBtn.Activated:Connect(refreshMacroDD)
+
+mRefreshBtn.Activated:Connect(function()
+    loadMacros()
+    refreshMacroDD()
+    print("🔄 Macros refreshed")
+end)
+
+-- Обновлять позицию dropdown при драге окна
+local originalDragConnect = drag
+RunService.RenderStepped:Connect(function()
+    if macroDD.Visible then
+        updateMacroDropdownPos()
+    end
+end)
 
 -- ==========================================
 -- ВКЛАДКА: SETTINGS (С ПОЛНЫМИ ИСПРАВЛЕНИЯМИ)
