@@ -595,7 +595,7 @@ listFrameLbl.ZIndex             = 5
 local macroSelBtn = Instance.new("TextButton")
 macroSelBtn.Parent          = scrollMacro
 macroSelBtn.Size            = UDim2.new(1,-104,0,26)
-macroSelBtn.Position        = UDim2.new(0,100,0,88)
+macroSelBtn.Position        = UDim2.new(0,100,0,220)
 macroSelBtn.BackgroundColor3 = C.panel
 macroSelBtn.BackgroundTransparency = 0.3
 macroSelBtn.Text            = ""
@@ -636,7 +636,7 @@ macroDD.Position             = UDim2.new(0, mainFrame.AbsolutePosition.X + CONTE
 macroDD.BackgroundColor3     = C.bg
 macroDD.BackgroundTransparency = 0.05
 macroDD.Visible              = false
-macroDD.ZIndex               = 100  -- ← ИЗМЕНЕНО: было 45
+macroDD.ZIndex               = 200  -- ← ИЗМЕНЕНО: было 45
 macroDD.ScrollBarThickness   = 3
 macroDD.ScrollBarImageColor3 = C.accent
 macroDD.BorderSizePixel      = 0
@@ -660,7 +660,7 @@ local function refreshMacroDD()
         item.Font            = Enum.Font.GothamBold
         item.TextSize        = 10
         item.TextXAlignment  = Enum.TextXAlignment.Left
-        item.ZIndex          = 46
+        item.ZIndex          = 201
         addCorner(item, 5)
         local n = mac.name
         item.Activated:Connect(function()
@@ -685,14 +685,14 @@ macroSelBtn.Activated:Connect(function()
 end)
 
 -- WIDE TOGGLES (MACRO)
-makeToggle(scrollMacro, "Record Macro",   "⏺ Record Macro",   120, function(v) isRecording = v end)
-makeToggle(scrollMacro, "Play Macro",     "▶ Play Macro",      157, function(v)
+makeToggle(scrollMacro, "Record Macro",   "⏺ Record Macro",   28, function(v) isRecording = v end)
+makeToggle(scrollMacro, "Play Macro",     "▶ Play Macro",      65, function(v)
     isPlaying = v
     if useHotkey then hotkeyBtn.Visible = v end
 end)
-makeToggle(scrollMacro, "Time Placement", "⏱ Time Placement",  194, function(v) end)
-makeToggle(scrollMacro, "Loop Mode",      "🔁 Loop Mode",       268, function(v) loopMode = v end)
-makeToggle(scrollMacro, "Hotkey",         "⌨ Hotkey",          305, function(v)
+makeToggle(scrollMacro, "Time Placement", "⏱ Time Placement",  102, function(v) end)
+makeToggle(scrollMacro, "Loop Mode",      "🔁 Loop Mode",       139, function(v) loopMode = v end)
+makeToggle(scrollMacro, "Hotkey",         "⌨ Hotkey",          176, function(v)
     useHotkey = v
     hotkeyBtn.Visible = v and isPlaying
 end)
