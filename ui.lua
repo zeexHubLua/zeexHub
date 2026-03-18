@@ -910,11 +910,23 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ==========================================
--- ВКЛАДКА: CHANNELS
+-- ВКЛАДКА: CHANNELS (ИСПРАВЛЕННАЯ)
 -- ==========================================
-sectionTitle(scrollChannels, "📢 КАНАЛЫ", 4)
 
--- TG CHANNEL BUTTON (с RGB обводкой)
+-- TITLE
+local chanTitle = Instance.new("TextLabel")
+chanTitle.Parent             = scrollChannels
+chanTitle.Size               = UDim2.new(1,-14,0,20)
+chanTitle.Position           = UDim2.new(0,7,0,4)
+chanTitle.BackgroundTransparency = 1
+chanTitle.Text               = "📢 КАНАЛЫ"
+chanTitle.TextColor3         = C.white
+chanTitle.Font               = Enum.Font.GothamBold
+chanTitle.TextSize           = 14
+chanTitle.TextXAlignment     = Enum.TextXAlignment.Left
+chanTitle.ZIndex             = 4
+
+-- TG CHANNEL BUTTON
 local tgBtn = Instance.new("TextButton")
 tgBtn.Parent          = scrollChannels
 tgBtn.Size            = UDim2.new(1, -14, 0, 60)
@@ -926,7 +938,7 @@ tgBtn.ZIndex          = 4
 tgBtn.AutoButtonColor = false
 addCorner(tgBtn, 12)
 
--- RGB STROKE ДЛЯ КНОПКИ
+-- RGB STROKE
 local tgStroke = addStroke(tgBtn, C.accent, 3)
 local tgHue = 0
 RunService.RenderStepped:Connect(function()
@@ -934,19 +946,19 @@ RunService.RenderStepped:Connect(function()
     tgStroke.Color = Color3.fromHSV(tgHue, 1, 1)
 end)
 
--- ANIME STICKER 1 (слева) - НАСТОЯЩИЕ АНИМЕ ЭМОДЗИ
-local sticker1 = Instance.new("TextLabel")
-sticker1.Parent             = tgBtn
-sticker1.Size               = UDim2.new(0, 50, 1, 0)
-sticker1.Position           = UDim2.new(0, 8, 0, 0)
-sticker1.BackgroundTransparency = 1
-sticker1.Text               = "🎀
-sticker1.TextColor3         = Color3.fromRGB(255, 150, 255)
-sticker1.Font               = Enum.Font.GothamBold
-sticker1.TextSize           = 24
-sticker1.ZIndex             = 5
+-- ОГОНЬ СЛЕВА 🔥
+local fire1 = Instance.new("TextLabel")
+fire1.Parent             = tgBtn
+fire1.Size               = UDim2.new(0, 50, 1, 0)
+fire1.Position           = UDim2.new(0, 8, 0, 0)
+fire1.BackgroundTransparency = 1
+fire1.Text               = "🔥"
+fire1.TextColor3         = Color3.fromRGB(255, 100, 50)
+fire1.Font               = Enum.Font.GothamBold
+fire1.TextSize           = 32
+fire1.ZIndex             = 5
 
--- MAIN TEXT (УМЕНЬШЕННЫЙ)
+-- ТЕКСТ
 local tgText = Instance.new("TextLabel")
 tgText.Parent             = tgBtn
 tgText.Size               = UDim2.new(1, -120, 1, 0)
@@ -958,52 +970,30 @@ tgText.Font               = Enum.Font.GothamBold
 tgText.TextSize           = isMobile and 14 or 16
 tgText.ZIndex             = 5
 
--- ANIME STICKER 2 (справа)
-local sticker2 = Instance.new("TextLabel")
-sticker2.Parent             = tgBtn
-sticker2.Size               = UDim2.new(0, 50, 1, 0)
-sticker2.Position           = UDim2.new(1, -58, 0, 0)
-sticker2.BackgroundTransparency = 1
-sticker2.Text               = "🎀"
-sticker2.TextColor3         = Color3.fromRGB(255, 150, 255)
-sticker2.Font               = Enum.Font.GothamBold
-sticker2.TextSize           = 24
-sticker2.ZIndex             = 5
+-- ОГОНЬ СПРАВА 🔥
+local fire2 = Instance.new("TextLabel")
+fire2.Parent             = tgBtn
+fire2.Size               = UDim2.new(0, 50, 1, 0)
+fire2.Position           = UDim2.new(1, -58, 0, 0)
+fire2.BackgroundTransparency = 1
+fire2.Text               = "🔥"
+fire2.TextColor3         = Color3.fromRGB(255, 100, 50)
+fire2.Font               = Enum.Font.GothamBold
+fire2.TextSize           = 32
+fire2.ZIndex             = 5
 
--- HOVER EFFECT
+-- HOVER
 tgBtn.MouseEnter:Connect(function()
     TweenService:Create(tgBtn, TweenInfo.new(0.2), {BackgroundTransparency = 0}):Play()
-    TweenService:Create(tgText, TweenInfo.new(0.2), {TextSize = isMobile and 15 or 17}):Play()
 end)
-
 tgBtn.MouseLeave:Connect(function()
     TweenService:Create(tgBtn, TweenInfo.new(0.2), {BackgroundTransparency = 0.1}):Play()
-    TweenService:Create(tgText, TweenInfo.new(0.2), {TextSize = isMobile and 14 or 16}):Play()
 end)
 
--- CLICK TO OPEN TG (АВТОМАТИЧЕСКИЙ ПЕРЕХОД)
+-- КЛИК (ТОЛЬКО КОПИРОВАНИЕ)
 tgBtn.Activated:Connect(function()
     local url = "https://t.me/zeenixs"
     
-    -- 1. Попытка открыть через request (работает в некоторых эксплоитах)
-    local success1 = pcall(function()
-        syn.request({
-            Url = url,
-            Method = "GET"
-        })
-    end)
-    
-    -- 2. Попытка через http (альтернатива)
-    if not success1 then
-        pcall(function()
-            game:GetService("HttpService"):RequestAsync({
-                Url = url,
-                Method = "GET"
-            })
-        end)
-    end
-    
-    -- 3. Копирование в буфер обмена (всегда работает)
     if setclipboard then
         setclipboard(url)
         tgText.Text = "✅ Скопировано!"
@@ -1011,30 +1001,20 @@ tgBtn.Activated:Connect(function()
         task.wait(1.5)
         tgText.Text = "TG Channel"
         tgText.TextColor3 = C.white
+    else
+        print("❌ Функция setclipboard недоступна")
     end
     
-    -- 4. Показать ссылку в консоли
-    print("📱 Открой Telegram: " .. url)
-    
-    -- 5. Попытка через GuiService (редко работает, но попробуем)
-    pcall(function()
-        local MarketplaceService = game:GetService("MarketplaceService")
-        MarketplaceService:PromptPurchase(player, 0) -- Фейковый промпт, закроется сразу
-    end)
-    
-    -- Анимация клика
-    TweenService:Create(tgBtn, TweenInfo.new(0.1), {Size = UDim2.new(1, -18, 0, 56)}):Play()
-    task.wait(0.1)
-    TweenService:Create(tgBtn, TweenInfo.new(0.1), {Size = UDim2.new(1, -14, 0, 60)}):Play()
+    print("📱 Telegram: " .. url)
 end)
 
--- DESCRIPTION (БЕЗ СЕРДЕЧЕК)
+-- ОПИСАНИЕ
 local descLbl = Instance.new("TextLabel")
 descLbl.Parent             = scrollChannels
-descLbl.Size               = UDim2.new(1, -14, 0, 40)
+descLbl.Size               = UDim2.new(1, -14, 0, 50)
 descLbl.Position           = UDim2.new(0, 7, 0, 100)
 descLbl.BackgroundTransparency = 1
-descLbl.Text               = "Подпишись на наш Telegram канал!\nПолучай обновления первым"
+descLbl.Text               = "🔥 Нажми чтобы скопировать ссылку!\n\nПодпишись на Telegram канал\nи получай обновления первым"
 descLbl.TextColor3         = Color3.fromRGB(180, 180, 220)
 descLbl.Font               = Enum.Font.Gotham
 descLbl.TextSize           = 11
@@ -1046,7 +1026,7 @@ descLbl.ZIndex             = 4
 local chanSep = Instance.new("Frame")
 chanSep.Parent          = scrollChannels
 chanSep.Size            = UDim2.new(1, -14, 0, 1)
-chanSep.Position        = UDim2.new(0, 7, 0, 148)
+chanSep.Position        = UDim2.new(0, 7, 0, 158)
 chanSep.BackgroundColor3 = C.accent
 chanSep.BackgroundTransparency = 0.7
 chanSep.BorderSizePixel = 0
@@ -1055,10 +1035,10 @@ chanSep.ZIndex          = 4
 -- CREDITS
 local creditsLbl2 = Instance.new("TextLabel")
 creditsLbl2.Parent             = scrollChannels
-creditsLbl2.Size               = UDim2.new(1, -14, 0, 40)
-creditsLbl2.Position           = UDim2.new(0, 7, 0, 160)
+creditsLbl2.Size               = UDim2.new(1, -14, 0, 50)
+creditsLbl2.Position           = UDim2.new(0, 7, 0, 170)
 creditsLbl2.BackgroundTransparency = 1
-creditsLbl2.Text               = "Made with passion by zeenixxs\nZeexHub © 2025"
+creditsLbl2.Text               = "⚡ ZeexHub by zeenixxs ⚡\n\nMade with passion\n© 2025"
 creditsLbl2.TextColor3         = Color3.fromRGB(180, 160, 255)
 creditsLbl2.TextTransparency   = 0.4
 creditsLbl2.Font               = Enum.Font.Gotham
@@ -1066,6 +1046,7 @@ creditsLbl2.TextSize           = 10
 creditsLbl2.TextYAlignment     = Enum.TextYAlignment.Top
 creditsLbl2.ZIndex             = 4
 
+-- ==========================================
 -- ==========================================
 -- ВКЛАДКА: SETTINGS (С ПОЛНЫМИ ИСПРАВЛЕНИЯМИ)
 -- ==========================================
