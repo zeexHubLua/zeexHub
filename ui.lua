@@ -233,11 +233,6 @@ UserInputService.InputChanged:Connect(function(inp)
             drag.fpos.X.Scale, drag.fpos.X.Offset + d.X,
             drag.fpos.Y.Scale, drag.fpos.Y.Offset + d.Y
         )
-        
-        -- ДОБАВЬ ЭТИ СТРОКИ:
-        if macroDD.Visible then
-            macroDD.Position = UDim2.new(0, mainFrame.AbsolutePosition.X + CONTENT_X + 100, 0, mainFrame.AbsolutePosition.Y + CONTENT_Y + 117)
-        end
     end
 end)
 
