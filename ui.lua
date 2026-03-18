@@ -498,7 +498,7 @@ waveDD.BackgroundColor3     = C.bg
 waveDD.BackgroundTransparency = 0.05
 waveDD.Visible              = false
 waveDD.ClipsDescendants     = true
-waveDD.ZIndex               = 15
+waveDD.ZIndex               = 40
 addCorner(waveDD, 8)
 addStroke(waveDD, C.accent, 2)
 
@@ -515,7 +515,7 @@ for i, w in ipairs(waves) do
     item.TextColor3      = C.white
     item.Font            = Enum.Font.GothamBold
     item.TextSize        = 11
-    item.ZIndex          = 16
+    item.ZIndex          = 41
     addCorner(item, 5)
     local wName = w
     item.Activated:Connect(function()
@@ -631,7 +631,7 @@ macroDD.Position             = UDim2.new(0,100,0,117)
 macroDD.BackgroundColor3     = C.bg
 macroDD.BackgroundTransparency = 0.05
 macroDD.Visible              = false
-macroDD.ZIndex               = 15
+macroDD.ZIndex               = 45
 macroDD.ScrollBarThickness   = 3
 macroDD.ScrollBarImageColor3 = C.accent
 macroDD.BorderSizePixel      = 0
@@ -655,7 +655,7 @@ local function refreshMacroDD()
         item.Font            = Enum.Font.GothamBold
         item.TextSize        = 10
         item.TextXAlignment  = Enum.TextXAlignment.Left
-        item.ZIndex          = 16
+        item.ZIndex          = 46
         addCorner(item, 5)
         local n = mac.name
         item.Activated:Connect(function()
@@ -686,7 +686,6 @@ makeToggle(scrollMacro, "Play Macro",     "▶ Play Macro",      157, function(v
     if useHotkey then hotkeyBtn.Visible = v end
 end)
 makeToggle(scrollMacro, "Time Placement", "⏱ Time Placement",  194, function(v) end)
-makeToggle(scrollMacro, "Unit Placement", "📍 Unit Placement",  231, function(v) end)
 makeToggle(scrollMacro, "Loop Mode",      "🔁 Loop Mode",       268, function(v) loopMode = v end)
 makeToggle(scrollMacro, "Hotkey",         "⌨ Hotkey",          305, function(v)
     useHotkey = v
@@ -913,7 +912,7 @@ cfgDD.BackgroundColor3     = C.bg
 cfgDD.BackgroundTransparency = 0.05
 cfgDD.Visible              = false
 cfgDD.ClipsDescendants     = true
-cfgDD.ZIndex               = 20
+cfgDD.ZIndex               = 50
 cfgDD.ScrollBarThickness   = 3
 cfgDD.ScrollBarImageColor3 = C.accent
 cfgDD.BorderSizePixel      = 0
@@ -934,7 +933,7 @@ local function refreshCfgDD()
         itemFrame.Position        = UDim2.new(0,4,0,(i-1)*34+4)
         itemFrame.BackgroundColor3 = isSel and Color3.fromRGB(88, 101, 242) or C.panel
         itemFrame.BackgroundTransparency = isSel and 0.05 or 0.4
-        itemFrame.ZIndex          = 21
+        itemFrame.ZIndex          = 51
         addCorner(itemFrame, 5)
         
         local itemBtn = Instance.new("TextButton")
@@ -947,7 +946,7 @@ local function refreshCfgDD()
         itemBtn.Font            = Enum.Font.GothamBold
         itemBtn.TextSize        = 10
         itemBtn.TextXAlignment  = Enum.TextXAlignment.Left
-        itemBtn.ZIndex          = 22
+        itemBtn.ZIndex          = 52
         
         local padding = Instance.new("UIPadding")
         padding.PaddingLeft = UDim.new(0,8)
@@ -963,7 +962,7 @@ local function refreshCfgDD()
         deleteBtn.TextColor3      = C.white
         deleteBtn.Font            = Enum.Font.GothamBold
         deleteBtn.TextSize        = 12
-        deleteBtn.ZIndex          = 23
+        deleteBtn.ZIndex          = 53
         addCorner(deleteBtn, 5)
         
         local n = cfg.name
@@ -1245,29 +1244,29 @@ UserInputService.InputBegan:Connect(function(inp)
     if inp.UserInputType ~= Enum.UserInputType.MouseButton1
     and inp.UserInputType ~= Enum.UserInputType.Touch then return end
     
-    local p = UserInputService:GetMouseLocation()
+    local p = inp.Position
     
-    local function outside(el)
+    local function isInside(el)
         if not el.Visible then return false end
         local ep, es = el.AbsolutePosition, el.AbsoluteSize
-        return p.X < ep.X or p.X > ep.X+es.X or p.Y < ep.Y or p.Y > ep.Y+es.Y
+        return p.X >= ep.X and p.X <= ep.X+es.X and p.Y >= ep.Y and p.Y <= ep.Y+es.Y
     end
     
-    if outside(waveDD) then
+    -- Закрывать ТОЛЬКО если клик ВНЕ элемента
+    if waveDD.Visible and not isInside(waveDD) and not isInside(wavePickBtn) then
         TweenService:Create(waveDD,TweenInfo.new(0.15),{Size=UDim2.new(0,120,0,0)}):Play()
         task.delay(0.15, function() waveDD.Visible = false end)
     end
     
-    if outside(macroDD) then 
-        macroDD.Visible = false 
+    if macroDD.Visible and not isInside(macroDD) and not isInside(macroSelBtn) then
+        macroDD.Visible = false
     end
     
-    if outside(cfgDD) then
+    if cfgDD.Visible and not isInside(cfgDD) and not isInside(cfgListBtn) then
         TweenService:Create(cfgDD,TweenInfo.new(0.15),{Size=UDim2.new(1,-14,0,0)}):Play()
         task.delay(0.15, function() cfgDD.Visible = false end)
     end
 end)
-
 -- ==========================================
 -- KEYBOARD SHORTCUTS
 -- ==========================================
