@@ -548,9 +548,71 @@ wavePickBtn.Activated:Connect(function()
 end)
 
 -- ==========================================
--- ВКЛАДКА: MACRO
+-- POPUP HELPER FUNCTIONS
 -- ==========================================
+local function popupTitle(win, text)
+    local l = Instance.new("TextLabel")
+    l.Parent             = win
+    l.Size               = UDim2.new(1,-16,0,26)
+    l.Position           = UDim2.new(0,8,0,8)
+    l.BackgroundTransparency = 1
+    l.Text               = text
+    l.TextColor3         = C.white
+    l.Font               = Enum.Font.GothamBold
+    l.TextSize           = 13
+    l.TextXAlignment     = Enum.TextXAlignment.Left
+    l.ZIndex             = 251
+    return l
+end
 
+local function popupBox(win, placeholder)
+    local box = Instance.new("TextBox")
+    box.Parent          = win
+    box.Size            = UDim2.new(1,-20,0,30)
+    box.Position        = UDim2.new(0,10,0,40)
+    box.BackgroundColor3 = C.panel
+    box.BackgroundTransparency = 0.2
+    box.Text            = ""
+    box.PlaceholderText = placeholder
+    box.TextColor3      = C.white
+    box.PlaceholderColor3 = C.dim
+    box.Font            = Enum.Font.Gotham
+    box.TextSize        = 12
+    box.ZIndex          = 251
+    addCorner(box, 7)
+    return box
+end
+
+local function popupBtns(win, onConfirm, onCancel)
+    local confirm = Instance.new("TextButton")
+    confirm.Parent          = win
+    confirm.Size            = UDim2.new(0,110,0,28)
+    confirm.Position        = UDim2.new(0,10,1,-38)
+    confirm.BackgroundColor3 = C.on
+    confirm.Text            = "✓ SAVE"
+    confirm.TextColor3      = C.white
+    confirm.Font            = Enum.Font.GothamBold
+    confirm.TextSize        = 12
+    confirm.ZIndex          = 251
+    addCorner(confirm, 7)
+
+    local cancel = Instance.new("TextButton")
+    cancel.Parent          = win
+    cancel.Size            = UDim2.new(0,110,0,28)
+    cancel.Position        = UDim2.new(1,-120,1,-38)
+    cancel.BackgroundColor3 = C.danger
+    cancel.Text            = "✕ CANCEL"
+    cancel.TextColor3      = C.white
+    cancel.Font            = Enum.Font.GothamBold
+    cancel.TextSize        = 12
+    cancel.ZIndex          = 251
+    addCorner(cancel, 7)
+
+    confirm.Activated:Connect(onConfirm)
+    cancel.Activated:Connect(onCancel)
+    
+    return confirm, cancel
+end
 -- ==========================================
 -- ВКЛАДКА: MACRO (ПОЛНОСТЬЮ ИСПРАВЛЕННАЯ)
 -- ==========================================
