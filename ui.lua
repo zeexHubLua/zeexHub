@@ -1576,131 +1576,110 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - REAL ROBLOX UI NAVIGATION
+-- AUTO SKIP - ПРАВИЛЬНАЯ ВЕРСИЯ
 -- ==========================================
 
 local GuiService = game:GetService("GuiService")
-local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local player = game:GetService("Players").LocalPlayer
 local gui = player:WaitForChild("PlayerGui")
 
 task.wait(3)
 
--- Поиск кнопки Skip
-local function findSkipButton()
-    local ok, btn = pcall(function()
-        return gui.GameGui.Screen.Middle.SandboxMenu.SandboxMenu.Frame.Items.Items.Waves.GoToWave.Items.Items.Button
-    end)
-    return ok and btn or nil
+-- Ищем кнопку Auto Skip В ИГРЕ (не в нашем GUI!)
+local function findGameAutoSkipButton()
+    for _, descendant in pairs(gui:GetDescendants()) do
+        -- Ищем TextLabel с текстом "Auto Skip"
+        if descendant:IsA("TextLabel") and descendant.Text == "Auto Skip" then
+            -- Проверяем что это НЕ наш GUI
+            if not descendant:IsDescendantOf(screenGui) then
+                local parent = descendant.Parent
+                if parent then
+                    -- Ищем кнопку рядом (обычно TextButton с текстом On/Off)
+                    for _, child in pairs(parent:GetChildren()) do
+                        if child:IsA("TextButton") then
+                            -- Проверяем что это кнопка переключатель
+                            if child.Text == "Off" or child.Text == "On" then
+                                return child
+                            end
+                        end
+                    end
+                    -- Альтернативно ищем ImageButton
+                    for _, child in pairs(parent:GetChildren()) do
+                        if child:IsA("ImageButton") or (child:IsA("TextButton") and child.Text == "") then
+                            return child
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return nil
 end
 
--- НАСТРОЙКА НАВИГАЦИИ (как в настоящих играх)
-local function setupNavigation(button)
+-- Проверка состояния (On или Off)
+local function isButtonOff(button)
     if not button then return false end
     
-    pcall(function()
-        -- Делаем кнопку видимой для навигации
-        button.Selectable = true
-        button.Active = true
-        
-        -- Устанавливаем как первый элемент навигации
-        -- (это то что делает Роблокс когда ты нажимаешь стрелки)
-        GuiService.SelectedObject = button
-    end)
+    -- Способ 1: Проверка текста
+    if button.Text == "Off" then
+        return true
+    end
     
-    return true
+    -- Способ 2: Проверка по цвету (обычно Off = серый)
+    if button.BackgroundColor3 then
+        local color = button.BackgroundColor3
+        -- Серый цвет (примерно)
+        if color.R < 0.5 and color.G < 0.5 and color.B < 0.5 then
+            return true
+        end
+    end
+    
+    return false
 end
 
--- РЕАЛЬНАЯ АКТИВАЦИЯ через InputObject
-local function realActivate(button)
+-- КЛИК через getconnections
+local function clickButton(button)
     if not button or not button.Parent then return false end
     if not button.Visible then return false end
     
     local success = false
     
+    -- Делаем кнопку активной
+    button.Active = true
+    button.Selectable = true
+    
     pcall(function()
-        -- Настраиваем навигацию
-        button.Selectable = true
-        button.Active = true
-        
-        -- Выбираем кнопку
-        GuiService.SelectedObject = button
-        
-        -- Ждём рендер
-        task.wait(0.05)
-        
-        -- Проверяем что кнопка действительно выбрана
-        if GuiService.SelectedObject == button then
-            
-            -- НАСТОЯЩАЯ АКТИВАЦИЯ - создаём InputObject как будто нажали ButtonA
-            local inputObject = Instance.new("InputObject")
-            
-            -- Вызываем GuiButton.Activated с InputObject
-            -- Это НАСТОЯЩИЙ способ активации через навигацию
-            
-            -- Но так как InputObject нельзя создать напрямую, используем обходной путь:
-            -- Вызываем внутреннее событие SelectionGained -> Activated
-            
-            -- 1. SelectionGained (кнопка получила фокус)
-            local selectionGainedEvent = button.SelectionGained
-            if selectionGainedEvent then
-                for _, conn in pairs(getconnections(selectionGainedEvent)) do
-                    pcall(function() conn:Fire() end)
-                end
-            end
-            
-            task.wait(0.03)
-            
-            -- 2. InputBegan на кнопке (как будто навели и нажали)
-            local inputBeganEvent = button.InputBegan
-            if inputBeganEvent then
-                for _, conn in pairs(getconnections(inputBeganEvent)) do
-                    pcall(function() conn:Fire() end)
-                end
-            end
-            
-            task.wait(0.02)
-            
-            -- 3. Activated (главное событие)
-            local activatedEvent = button.Activated
-            if activatedEvent then
-                for _, conn in pairs(getconnections(activatedEvent)) do
-                    pcall(function() 
-                        conn:Fire() 
-                        success = true
-                    end)
-                end
-            end
-            
-            task.wait(0.02)
-            
-            -- 4. InputEnded
-            local inputEndedEvent = button.InputEnded
-            if inputEndedEvent then
-                for _, conn in pairs(getconnections(inputEndedEvent)) do
-                    pcall(function() conn:Fire() end)
-                end
-            end
+        -- Фаерим все события
+        for _, conn in pairs(getconnections(button.Activated)) do
+            conn:Fire()
+            success = true
         end
         
-        -- Убираем выбор
-        task.wait(0.05)
-        GuiService.SelectedObject = nil
-        button.Selectable = false
+        for _, conn in pairs(getconnections(button.MouseButton1Click)) do
+            conn:Fire()
+            success = true
+        end
+        
+        for _, conn in pairs(getconnections(button.MouseButton1Down)) do
+            conn:Fire()
+        end
+        
+        task.wait(0.03)
+        
+        for _, conn in pairs(getconnections(button.MouseButton1Up)) do
+            conn:Fire()
+        end
     end)
     
     return success
 end
 
--- Переменные
-local skipButton = nil
-local lastTry = 0
-local lastRefresh = 0
-local clickCount = 0
-
-local TRY_INTERVAL = 0.5
-local REFRESH_INTERVAL = 3.0
+-- Состояние
+local autoSkipButton = nil
+local lastCheck = 0
+local isWaiting = false
+local CHECK_INTERVAL = 1.0
 
 -- Главный цикл
 local conn
@@ -1710,58 +1689,81 @@ conn = RunService.Heartbeat:Connect(function()
         return
     end
     
+    -- Работаем только если включён Auto Skip в НАШЕМ GUI
     if not toggleStates["Auto Skip"] then
-        clickCount = 0
+        isWaiting = false
         return
     end
     
     local now = tick()
     
-    -- Обновление кнопки
-    if now - lastRefresh >= REFRESH_INTERVAL then
-        lastRefresh = now
-        skipButton = findSkipButton()
-    end
-    
-    -- Попытка активации
-    if now - lastTry >= TRY_INTERVAL then
-        if not skipButton or not skipButton.Parent then
-            skipButton = findSkipButton()
+    -- Проверка каждую секунду
+    if now - lastCheck >= CHECK_INTERVAL then
+        lastCheck = now
+        
+        -- Ищем кнопку в игре
+        if not autoSkipButton or not autoSkipButton.Parent then
+            autoSkipButton = findGameAutoSkipButton()
+            
+            if autoSkipButton and toggleStates["Notifications"] then
+                print("🔍 [AUTO SKIP] Кнопка найдена:", autoSkipButton:GetFullName())
+            end
         end
         
-        if skipButton and skipButton.Visible and skipButton.Active then
-            if realActivate(skipButton) then
-                lastTry = now
-                clickCount = clickCount + 1
-                
-                if toggleStates["Notifications"] then
-                    warn(string.format("⏭️ [SKIP] Navigation click #%d", clickCount))
+        if autoSkipButton and autoSkipButton.Visible then
+            -- Проверяем состояние
+            if isButtonOff(autoSkipButton) then
+                -- Кнопка выключена - ВКЛЮЧАЕМ
+                if not isWaiting then
+                    if clickButton(autoSkipButton) then
+                        isWaiting = true
+                        
+                        if toggleStates["Notifications"] then
+                            warn("⏭️ [AUTO SKIP] Включён! Жду выключения...")
+                        end
+                    end
                 end
+            else
+                -- Кнопка включена - ЖДЁМ
+                if isWaiting then
+                    if toggleStates["Notifications"] then
+                        print("✅ [AUTO SKIP] Кнопка включена, ожидаю...")
+                    end
+                end
+                isWaiting = false
             end
         else
-            if clickCount > 0 then
-                if toggleStates["Notifications"] then
-                    print(string.format("✅ [SKIP] Done (%d)", clickCount))
-                end
-                clickCount = 0
-            end
+            isWaiting = false
         end
+    end
+end)
+
+-- Обновление при изменении GUI
+gui.DescendantAdded:Connect(function(obj)
+    task.wait(0.5)
+    autoSkipButton = findGameAutoSkipButton()
+end)
+
+gui.DescendantRemoving:Connect(function(obj)
+    if obj == autoSkipButton then
+        autoSkipButton = nil
+        isWaiting = false
     end
 end)
 
 -- Респавн
 player.CharacterAdded:Connect(function()
     task.wait(3)
-    skipButton = nil
-    clickCount = 0
-    lastTry = 0
-    lastRefresh = 0
+    autoSkipButton = nil
+    isWaiting = false
+    lastCheck = 0
 end)
 
 print("========================================")
-print("✅ AUTO SKIP (REAL NAVIGATION)")
-print("   Using: SelectionGained -> Activated")
-print("   Interval:", TRY_INTERVAL, "sec")
+print("✅ AUTO SKIP READY")
+print("   Ищет кнопку Auto Skip в игре")
+print("   Тыкает 1 раз когда Off")
+print("   Ждёт пока не выключится снова")
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
