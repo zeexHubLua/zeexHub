@@ -1576,24 +1576,15 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - ПРОСТО TAB -> СТРЕЛКИ -> ENTER
+-- AUTO SKIP - БЕЗ СТРЕЛОК (ПРЯМОЙ ВЫБОР)
 -- ==========================================
 
-local VirtualInputManager = game:GetService("VirtualInputManager")
 local GuiService = game:GetService("GuiService")
 local RunService = game:GetService("RunService")
 local player = game:GetService("Players").LocalPlayer
 local gui = player:WaitForChild("PlayerGui")
 
 task.wait(3)
-
--- Нажатие клавиши
-local function pressKey(key)
-    VirtualInputManager:SendKeyEvent(true, key, false, game)
-    task.wait(0.05)
-    VirtualInputManager:SendKeyEvent(false, key, false, game)
-    task.wait(0.15)
-end
 
 -- Путь к кнопке
 local function findButton()
@@ -1603,7 +1594,7 @@ local function findButton()
     return ok and btn or nil
 end
 
--- Активация через навигацию
+-- Активация через ПРЯМОЙ выбор + getconnections
 local function activate()
     local btn = findButton()
     
@@ -1615,48 +1606,60 @@ local function activate()
     end
     
     if toggleStates["Notifications"] then
-        print("🎮 [AUTO SKIP] Начинаю навигацию...")
+        print("🎯 [AUTO SKIP] Активирую кнопку...")
     end
     
-    -- Входим в навигацию
-    pressKey(Enum.KeyCode.Tab)
-    task.wait(0.2)
+    local success = false
     
-    -- Навигация к кнопке
-    for i = 1, 50 do
-        -- Проверяем выбрана ли наша кнопка
+    pcall(function()
+        -- Делаем кнопку выбираемой
+        btn.Selectable = true
+        btn.Active = true
+        
+        -- ВЫБИРАЕМ кнопку напрямую
+        GuiService.SelectedObject = btn
+        
+        task.wait(0.1)
+        
+        -- Проверяем что выбрали
         if GuiService.SelectedObject == btn then
             if toggleStates["Notifications"] then
-                print("🎯 [AUTO SKIP] Кнопка выбрана!")
+                print("✅ [AUTO SKIP] Кнопка выбрана!")
             end
-            break
+            
+            -- Фаерим все события
+            for _, conn in pairs(getconnections(btn.Activated)) do
+                conn:Fire()
+                success = true
+            end
+            
+            for _, conn in pairs(getconnections(btn.MouseButton1Click)) do
+                conn:Fire()
+                success = true
+            end
+            
+            for _, conn in pairs(getconnections(btn.MouseButton1Down)) do
+                conn:Fire()
+            end
+            
+            task.wait(0.05)
+            
+            for _, conn in pairs(getconnections(btn.MouseButton1Up)) do
+                conn:Fire()
+            end
+            
+            if toggleStates["Notifications"] then
+                warn("⏭️ [AUTO SKIP] События активированы!")
+            end
         end
         
-        -- Жмём стрелки
-        pressKey(Enum.KeyCode.Down)
-        
-        if i % 3 == 0 then
-            pressKey(Enum.KeyCode.Right)
-        end
-    end
+        -- Убираем выбор
+        task.wait(0.1)
+        GuiService.SelectedObject = nil
+        btn.Selectable = false
+    end)
     
-    -- Проверка
-    if GuiService.SelectedObject ~= btn then
-        if toggleStates["Notifications"] then
-            warn("❌ [AUTO SKIP] Не дошли до кнопки")
-        end
-        return false
-    end
-    
-    -- Жмём Enter
-    task.wait(0.2)
-    pressKey(Enum.KeyCode.Return)
-    
-    if toggleStates["Notifications"] then
-        warn("⏭️ [AUTO SKIP] Enter нажат!")
-    end
-    
-    return true
+    return success
 end
 
 -- Таймер
@@ -1677,7 +1680,7 @@ conn = RunService.Heartbeat:Connect(function()
     
     local now = tick()
     
-    if now - lastTry < 5 then
+    if now - lastTry < 3 then
         return
     end
     
@@ -1686,6 +1689,13 @@ conn = RunService.Heartbeat:Connect(function()
     -- Пробуем активировать
     if activate() then
         activated = true
+        if toggleStates["Notifications"] then
+            print("✅ [AUTO SKIP] Успешно активирован!")
+        end
+    else
+        if toggleStates["Notifications"] then
+            warn("❌ [AUTO SKIP] Не удалось активировать, повтор через 3 сек")
+        end
     end
 end)
 
@@ -1697,8 +1707,9 @@ player.CharacterAdded:Connect(function()
 end)
 
 print("========================================")
-print("✅ AUTO SKIP (SIMPLE)")
-print("   Tab -> Down/Right -> Enter")
+print("✅ AUTO SKIP (NO ARROWS)")
+print("   Method: Direct GuiService.SelectedObject")
+print("   + getconnections Fire")
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
