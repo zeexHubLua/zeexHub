@@ -1576,10 +1576,11 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - ПРОСТО АКТИВАЦИЯ (БЕЗ ПРОВЕРОК)
+-- AUTO SKIP - РЕАЛЬНАЯ НАВИГАЦИЯ ЧЕРЕЗ CoreGui
 -- ==========================================
 
 local GuiService = game:GetService("GuiService")
+local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local player = game:GetService("Players").LocalPlayer
 local gui = player:WaitForChild("PlayerGui")
@@ -1599,8 +1600,8 @@ local function findAutoSkipButton()
     return nil
 end
 
--- АКТИВАЦИЯ БЕЗ ПРОВЕРОК
-local function activate()
+-- ВАРИАНТ 2: Через CoreGuiNavigationEnabled
+local function activateViaCoreGui()
     local btn = findAutoSkipButton()
     
     if not btn or not btn.Visible then
@@ -1611,19 +1612,90 @@ local function activate()
     end
     
     if toggleStates["Notifications"] then
-        warn("🔥 [AUTO SKIP] АКТИВИРУЮ КНОПКУ...")
+        warn("🔥 [AUTO SKIP] Метод 2: CoreGui Navigation")
     end
     
     local success = false
     
     pcall(function()
-        -- Делаем выбираемой
+        -- Включаем ПОЛНУЮ навигацию
+        GuiService.CoreGuiNavigationEnabled = true
+        GuiService.GuiNavigationEnabled = true
+        GuiService.AutoSelectGuiEnabled = true
+        
+        task.wait(0.2)
+        
+        -- Делаем кнопку доступной
         btn.Selectable = true
         btn.Active = true
+        btn.AutoButtonColor = true
         
         task.wait(0.1)
         
-        -- ВЫБИРАЕМ через GuiService
+        -- ВЫБИРАЕМ
+        GuiService:Select(btn)
+        
+        task.wait(0.2)
+        
+        -- Проверка
+        if GuiService.SelectedObject == btn then
+            if toggleStates["Notifications"] then
+                print("✅ Выбрано через GuiService:Select()!")
+            end
+            
+            task.wait(0.15)
+            
+            -- Фаерим события
+            for _, conn in pairs(getconnections(btn.Activated)) do
+                pcall(function()
+                    conn:Fire()
+                    success = true
+                    if toggleStates["Notifications"] then
+                        warn("🔥 Activated!")
+                    end
+                end)
+            end
+            
+            for _, conn in pairs(getconnections(btn.MouseButton1Click)) do
+                pcall(function()
+                    conn:Fire()
+                    if toggleStates["Notifications"] then
+                        warn("🔥 Click!")
+                    end
+                end)
+            end
+        else
+            if toggleStates["Notifications"] then
+                warn("❌ GuiService:Select() не сработал")
+            end
+        end
+        
+        task.wait(0.2)
+        GuiService.SelectedObject = nil
+    end)
+    
+    return success
+end
+
+-- ВАРИАНТ 3: Через InputObject (симуляция Enter на выбранной кнопке)
+local function activateViaInputObject()
+    local btn = findAutoSkipButton()
+    
+    if not btn or not btn.Visible then
+        return false
+    end
+    
+    if toggleStates["Notifications"] then
+        warn("🔥 [AUTO SKIP] Метод 3: InputObject (Enter)")
+    end
+    
+    local success = false
+    
+    pcall(function()
+        btn.Selectable = true
+        btn.Active = true
+        
+        -- ВЫБИРАЕМ
         GuiService.SelectedObject = btn
         
         task.wait(0.2)
@@ -1633,64 +1705,139 @@ local function activate()
                 print("✅ Кнопка выбрана!")
             end
             
-            -- SelectionGained
-            for _, conn in pairs(getconnections(btn.SelectionGained)) do
-                pcall(function() conn:Fire() end)
+            -- Создаём FAKE InputObject (как нажатие Enter)
+            local fakeInput = {
+                KeyCode = Enum.KeyCode.Return,
+                UserInputType = Enum.UserInputType.Keyboard,
+                UserInputState = Enum.UserInputState.Begin
+            }
+            
+            -- InputBegan с Enter на выбранной кнопке
+            for _, conn in pairs(getconnections(btn.InputBegan)) do
+                pcall(function()
+                    conn:Fire(fakeInput)
+                    if toggleStates["Notifications"] then
+                        warn("🔥 InputBegan (Enter)!")
+                    end
+                end)
             end
             
             task.wait(0.1)
             
-            -- Activated (ГЛАВНОЕ)
+            -- InputEnded
+            fakeInput.UserInputState = Enum.UserInputState.End
+            
+            for _, conn in pairs(getconnections(btn.InputEnded)) do
+                pcall(function()
+                    conn:Fire(fakeInput)
+                end)
+            end
+            
+            task.wait(0.05)
+            
+            -- Activated
             for _, conn in pairs(getconnections(btn.Activated)) do
                 pcall(function()
                     conn:Fire()
                     success = true
                     if toggleStates["Notifications"] then
-                        warn("🔥 Activated FIRED!")
+                        warn("🔥 Activated!")
                     end
                 end)
-            end
-            
-            -- MouseButton1Click
-            for _, conn in pairs(getconnections(btn.MouseButton1Click)) do
-                pcall(function()
-                    conn:Fire()
-                    if toggleStates["Notifications"] then
-                        warn("🔥 MouseButton1Click FIRED!")
-                    end
-                end)
-            end
-            
-            -- MouseButton1Down
-            for _, conn in pairs(getconnections(btn.MouseButton1Down)) do
-                pcall(function() conn:Fire() end)
-            end
-            
-            task.wait(0.05)
-            
-            -- MouseButton1Up
-            for _, conn in pairs(getconnections(btn.MouseButton1Up)) do
-                pcall(function() conn:Fire() end)
-            end
-            
-            task.wait(0.1)
-            
-            -- SelectionLost
-            for _, conn in pairs(getconnections(btn.SelectionLost)) do
-                pcall(function() conn:Fire() end)
             end
         end
         
-        -- Очищаем
-        task.wait(0.1)
+        task.wait(0.2)
         GuiService.SelectedObject = nil
-        btn.Selectable = false
     end)
     
     return success
 end
 
--- ОДИН РАЗ при включении toggle
+-- ВАРИАНТ 4: Через GuiButton:SetState()
+local function activateViaSetState()
+    local btn = findAutoSkipButton()
+    
+    if not btn or not btn.Visible then
+        return false
+    end
+    
+    if toggleStates["Notifications"] then
+        warn("🔥 [AUTO SKIP] Метод 4: SetState")
+    end
+    
+    local success = false
+    
+    pcall(function()
+        btn.Active = true
+        
+        -- Пробуем SetState (если есть)
+        if btn.SetState then
+            btn:SetState(Enum.GuiState.Press)
+            task.wait(0.1)
+            btn:SetState(Enum.GuiState.Idle)
+            
+            if toggleStates["Notifications"] then
+                warn("🔥 SetState выполнен!")
+            end
+        end
+        
+        -- Фаерим события
+        for _, conn in pairs(getconnections(btn.Activated)) do
+            pcall(function()
+                conn:Fire()
+                success = true
+            end)
+        end
+    end)
+    
+    return success
+end
+
+-- Пробуем ВСЕ методы по очереди
+local function tryAllMethods()
+    if toggleStates["Notifications"] then
+        print("========================================")
+        warn("🔥 [AUTO SKIP] ПРОБУЮ ВСЕ МЕТОДЫ...")
+        print("========================================")
+    end
+    
+    -- Метод 2: CoreGui
+    if activateViaCoreGui() then
+        if toggleStates["Notifications"] then
+            print("✅✅✅ Метод 2 (CoreGui) СРАБОТАЛ!")
+        end
+        return true
+    end
+    
+    task.wait(0.5)
+    
+    -- Метод 3: InputObject
+    if activateViaInputObject() then
+        if toggleStates["Notifications"] then
+            print("✅✅✅ Метод 3 (InputObject) СРАБОТАЛ!")
+        end
+        return true
+    end
+    
+    task.wait(0.5)
+    
+    -- Метод 4: SetState
+    if activateViaSetState() then
+        if toggleStates["Notifications"] then
+            print("✅✅✅ Метод 4 (SetState) СРАБОТАЛ!")
+        end
+        return true
+    end
+    
+    if toggleStates["Notifications"] then
+        warn("❌❌❌ ВСЕ МЕТОДЫ НЕ СРАБОТАЛИ!")
+    end
+    
+    return false
+end
+
+-- Главный цикл
 local activated = false
 
 local conn
@@ -1700,20 +1847,10 @@ conn = RunService.Heartbeat:Connect(function()
         return
     end
     
-    -- Активируем ТОЛЬКО 1 РАЗ
     if not activated then
         task.wait(1)
-        
-        if activate() then
-            activated = true
-            if toggleStates["Notifications"] then
-                print("✅✅✅ [AUTO SKIP] ЗАВЕРШЕНО!")
-            end
-        else
-            if toggleStates["Notifications"] then
-                warn("❌ [AUTO SKIP] НЕ СРАБОТАЛО!")
-            end
-        end
+        tryAllMethods()
+        activated = true
     end
 end)
 
@@ -1724,8 +1861,10 @@ player.CharacterAdded:Connect(function()
 end)
 
 print("========================================")
-print("✅ AUTO SKIP (NO CHECKS - JUST ACTIVATE)")
-print("   Активирует 1 раз при включении toggle")
+print("✅ AUTO SKIP (4 РАЗНЫХ МЕТОДА)")
+print("   2. CoreGuiNavigationEnabled + Select")
+print("   3. InputObject (Enter на выбранной)")
+print("   4. SetState (Press -> Idle)")
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
