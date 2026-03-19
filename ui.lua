@@ -1576,9 +1576,10 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - ВЫЗОВ ФУНКЦИИ НАПРЯМУЮ
+-- AUTO SKIP - ПРАВИЛЬНЫЙ ПОРЯДОК СОБЫТИЙ
 -- ==========================================
 
+local GuiService = game:GetService("GuiService")
 local RunService = game:GetService("RunService")
 local player = game:GetService("Players").LocalPlayer
 local gui = player:WaitForChild("PlayerGui")
@@ -1597,7 +1598,7 @@ local function findButton()
     return nil
 end
 
--- АКТИВАЦИЯ - ВЫЗОВ ФУНКЦИИ
+-- АКТИВАЦИЯ В ПРАВИЛЬНОМ ПОРЯДКЕ
 local function activate()
     local btn = findButton()
     
@@ -1609,44 +1610,101 @@ local function activate()
     end
     
     if toggleStates["Notifications"] then
-        warn("🔥 ВЫЗЫВАЮ ФУНКЦИЮ MouseButton1Click...")
+        warn("🔥 НАЧИНАЮ ПОСЛЕДОВАТЕЛЬНОСТЬ...")
     end
     
     local success = false
     
     pcall(function()
-        -- Получаем соединения MouseButton1Click
-        local connections = getconnections(btn.MouseButton1Click)
+        -- Делаем кнопку активной
+        btn.Active = true
+        btn.Selectable = true
         
+        task.wait(0.1)
+        
+        -- ШАГ 1: MouseEnter (навели мышь)
         if toggleStates["Notifications"] then
-            print("   Соединений найдено:", #connections)
+            print("1️⃣ MouseEnter")
         end
         
-        -- Вызываем ФУНКЦИЮ напрямую
-        for i, conn in pairs(connections) do
+        local enterConns = getconnections(btn.MouseEnter)
+        for _, conn in pairs(enterConns) do
+            if conn.Function then
+                pcall(function() conn.Function() end)
+            end
+        end
+        
+        task.wait(0.15)
+        
+        -- ШАГ 2: SelectionGained (кнопка выбрана через навигацию)
+        if toggleStates["Notifications"] then
+            print("2️⃣ SelectionGained")
+        end
+        
+        GuiService.SelectedObject = btn
+        
+        task.wait(0.1)
+        
+        local gainedConns = getconnections(btn.SelectionGained)
+        for _, conn in pairs(gainedConns) do
+            if conn.Function then
+                pcall(function() conn.Function() end)
+            end
+        end
+        
+        task.wait(0.2)
+        
+        -- ШАГ 3: MouseButton1Click (САМ КЛИК)
+        if toggleStates["Notifications"] then
+            warn("3️⃣ MouseButton1Click (КЛИК!)")
+        end
+        
+        local clickConns = getconnections(btn.MouseButton1Click)
+        for i, conn in pairs(clickConns) do
             if conn.Function then
                 pcall(function()
-                    -- ВЫЗЫВАЕМ ФУНКЦИЮ
                     conn.Function()
-                    
                     success = true
-                    
                     if toggleStates["Notifications"] then
-                        warn("✅ ФУНКЦИЯ ВЫЗВАНА! (#" .. i .. ")")
+                        warn("   ✅ Функция клика выполнена!")
                     end
                 end)
             end
         end
         
-        -- Дополнительно: SelectionGained
-        local selConns = getconnections(btn.SelectionGained)
-        for _, conn in pairs(selConns) do
+        task.wait(0.15)
+        
+        -- ШАГ 4: SelectionLost (убрали выбор)
+        if toggleStates["Notifications"] then
+            print("4️⃣ SelectionLost")
+        end
+        
+        GuiService.SelectedObject = nil
+        
+        local lostConns = getconnections(btn.SelectionLost)
+        for _, conn in pairs(lostConns) do
             if conn.Function then
-                pcall(function()
-                    conn.Function()
-                end)
+                pcall(function() conn.Function() end)
             end
         end
+        
+        task.wait(0.1)
+        
+        -- ШАГ 5: MouseLeave (увели мышь)
+        if toggleStates["Notifications"] then
+            print("5️⃣ MouseLeave")
+        end
+        
+        local leaveConns = getconnections(btn.MouseLeave)
+        for _, conn in pairs(leaveConns) do
+            if conn.Function then
+                pcall(function() conn.Function() end)
+            end
+        end
+        
+        task.wait(0.1)
+        
+        btn.Selectable = false
     end)
     
     return success
@@ -1667,7 +1725,9 @@ conn = RunService.Heartbeat:Connect(function()
         
         if activate() then
             if toggleStates["Notifications"] then
-                print("✅✅✅ AUTO SKIP АКТИВИРОВАН!")
+                print("========================================")
+                warn("✅✅✅ AUTO SKIP АКТИВИРОВАН!")
+                print("========================================")
             end
         else
             if toggleStates["Notifications"] then
@@ -1686,8 +1746,12 @@ player.CharacterAdded:Connect(function()
 end)
 
 print("========================================")
-print("✅ AUTO SKIP (FUNCTION CALL)")
-print("   Вызывает conn.Function() напрямую")
+print("✅ AUTO SKIP (ПРАВИЛЬНАЯ ПОСЛЕДОВАТЕЛЬНОСТЬ)")
+print("   1. MouseEnter")
+print("   2. SelectionGained")
+print("   3. MouseButton1Click")
+print("   4. SelectionLost")
+print("   5. MouseLeave")
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
