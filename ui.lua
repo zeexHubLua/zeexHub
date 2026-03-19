@@ -1576,234 +1576,202 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - ИСПРАВЛЕНО (БЕЗ .Text)
+-- AUTO SKIP - ЧИСТАЯ UI НАВИГАЦИЯ ROBLOX
 -- ==========================================
 
+local GuiService = game:GetService("GuiService")
 local RunService = game:GetService("RunService")
 local player = game:GetService("Players").LocalPlayer
 local gui = player:WaitForChild("PlayerGui")
 
 task.wait(3)
 
--- Находим кнопку Auto Skip
+-- Путь к кнопке
 local function findAutoSkipButton()
     local ok, btn = pcall(function()
         return gui.GameGui.Screen.Middle.SandboxMenu.SandboxMenu.Frame.Items.Items.Waves.GoToWave.Items.Items.Button
     end)
     
     if ok and btn and btn.Parent then
-        local size = btn.AbsoluteSize
-        if size.X > 90 and size.X < 120 and size.Y > 20 and size.Y < 35 then
-            return btn
-        end
+        return btn
     end
     
     return nil
 end
 
--- Ищем TextLabel рядом с кнопкой
-local function findTextLabel(button)
-    if not button or not button.Parent then return nil end
+-- АКТИВАЦИЯ через UI навигацию
+local function activateViaNavigation()
+    local targetButton = findAutoSkipButton()
     
-    -- Проверяем детей кнопки
-    for _, child in pairs(button:GetChildren()) do
-        if child:IsA("TextLabel") then
-            local hasText = pcall(function() return child.Text end)
-            if hasText then
-                local text = child.Text or ""
-                if text:find("Auto Skip") then
-                    return child
-                end
-            end
+    if not targetButton or not targetButton.Visible then
+        if toggleStates["Notifications"] then
+            print("⚠️ [AUTO SKIP] Кнопка не найдена")
         end
-    end
-    
-    -- Проверяем детей Parent
-    if button.Parent then
-        for _, child in pairs(button.Parent:GetChildren()) do
-            if child:IsA("TextLabel") then
-                local hasText = pcall(function() return child.Text end)
-                if hasText then
-                    local text = child.Text or ""
-                    if text:find("Auto Skip") then
-                        return child
-                    end
-                end
-            end
-        end
-    end
-    
-    return nil
-end
-
--- Проверяем ВЫКЛЮЧЕНА ли кнопка (только по цвету)
-local function isButtonOff(button)
-    if not button then return false end
-    
-    -- Проверка по TextLabel если есть
-    local textLabel = findTextLabel(button)
-    if textLabel then
-        local ok, text = pcall(function() return textLabel.Text end)
-        if ok and text then
-            if text:lower():find("off") then
-                return true -- OFF
-            end
-            if text:lower():find("on") then
-                return false -- ON
-            end
-        end
-    end
-    
-    -- Проверка по цвету
-    local color = nil
-    
-    -- Пробуем ImageColor3
-    pcall(function()
-        if button.ImageColor3 then
-            color = button.ImageColor3
-        end
-    end)
-    
-    -- Пробуем BackgroundColor3
-    if not color then
-        pcall(function()
-            if button.BackgroundColor3 then
-                color = button.BackgroundColor3
-            end
-        end)
-    end
-    
-    if color then
-        -- Оранжевый = OFF (R высокий, G средний, B низкий)
-        if color.R > 0.6 and color.G > 0.3 and color.G < 0.7 and color.B < 0.3 then
-            return true
-        end
-        
-        -- Зелёный = ON (G высокий, R низкий)
-        if color.G > 0.5 and color.R < 0.5 then
-            return false
-        end
-    end
-    
-    -- По умолчанию считаем что выключена
-    return true
-end
-
--- КЛИК
-local function clickButton(button)
-    if not button or not button.Parent or not button.Visible then
         return false
     end
     
+    if toggleStates["Notifications"] then
+        print("🎯 [AUTO SKIP] Начинаю UI навигацию...")
+    end
+    
     local success = false
-    button.Active = true
     
     pcall(function()
-        for _, conn in pairs(getconnections(button.MouseButton1Down)) do
-            conn:Fire()
-            success = true
+        -- Шаг 1: Делаем кнопку Selectable
+        targetButton.Selectable = true
+        targetButton.Active = true
+        
+        task.wait(0.1)
+        
+        -- Шаг 2: ВЫБИРАЕМ кнопку через GuiService
+        GuiService.SelectedObject = targetButton
+        
+        task.wait(0.2)
+        
+        -- Шаг 3: Проверяем что кнопка выбрана
+        if GuiService.SelectedObject == targetButton then
+            if toggleStates["Notifications"] then
+                print("✅ [AUTO SKIP] Кнопка выбрана через GuiService!")
+            end
+            
+            task.wait(0.15)
+            
+            -- Шаг 4: Фаерим события ВЫБРАННОЙ кнопки
+            
+            -- SelectionGained (когда кнопка становится выбранной)
+            for _, conn in pairs(getconnections(targetButton.SelectionGained)) do
+                pcall(function()
+                    conn:Fire()
+                end)
+            end
+            
+            task.wait(0.1)
+            
+            -- Activated (главное событие для выбранных элементов)
+            for _, conn in pairs(getconnections(targetButton.Activated)) do
+                pcall(function()
+                    conn:Fire()
+                    success = true
+                end)
+            end
+            
+            task.wait(0.05)
+            
+            -- MouseButton1Click (дополнительно)
+            for _, conn in pairs(getconnections(targetButton.MouseButton1Click)) do
+                pcall(function()
+                    conn:Fire()
+                    success = true
+                end)
+            end
+            
+            task.wait(0.05)
+            
+            -- MouseButton1Down + Up
+            for _, conn in pairs(getconnections(targetButton.MouseButton1Down)) do
+                pcall(function()
+                    conn:Fire()
+                end)
+            end
+            
+            task.wait(0.03)
+            
+            for _, conn in pairs(getconnections(targetButton.MouseButton1Up)) do
+                pcall(function()
+                    conn:Fire()
+                end)
+            end
+            
+            if toggleStates["Notifications"] then
+                warn("⏭️ [AUTO SKIP] Все события активированы!")
+            end
+            
+            task.wait(0.1)
+            
+            -- SelectionLost (когда убираем выбор)
+            for _, conn in pairs(getconnections(targetButton.SelectionLost)) do
+                pcall(function()
+                    conn:Fire()
+                end)
+            end
+            
+        else
+            if toggleStates["Notifications"] then
+                warn("❌ [AUTO SKIP] Не удалось выбрать кнопку")
+                print("   Ожидалось:", targetButton:GetFullName())
+                print("   Выбрано:", GuiService.SelectedObject)
+            end
         end
-    end)
-    
-    task.wait(0.05)
-    
-    pcall(function()
-        for _, conn in pairs(getconnections(button.MouseButton1Up)) do
-            conn:Fire()
-            success = true
-        end
-    end)
-    
-    pcall(function()
-        for _, conn in pairs(getconnections(button.MouseButton1Click)) do
-            conn:Fire()
-            success = true
-        end
-    end)
-    
-    pcall(function()
-        for _, conn in pairs(getconnections(button.Activated)) do
-            conn:Fire()
-            success = true
-        end
+        
+        -- Шаг 5: Убираем выбор
+        task.wait(0.15)
+        GuiService.SelectedObject = nil
+        targetButton.Selectable = false
     end)
     
     return success
 end
 
 -- Переменные
-local autoSkipButton = nil
-local lastCheck = 0
-local hasActivated = false
+local activated = false
+local lastTry = 0
+local RETRY_INTERVAL = 3.0
 
 -- Главный цикл
 local conn
 conn = RunService.Heartbeat:Connect(function()
     if not toggleStates or not toggleStates["Auto Skip"] then
-        hasActivated = false
+        activated = false
+        return
+    end
+    
+    if activated then
         return
     end
     
     local now = tick()
     
-    if now - lastCheck < 2 then
+    if now - lastTry < RETRY_INTERVAL then
         return
     end
     
-    lastCheck = now
+    lastTry = now
     
-    -- Находим кнопку
-    if not autoSkipButton or not autoSkipButton.Parent then
-        autoSkipButton = findAutoSkipButton()
-    end
-    
-    if not autoSkipButton or not autoSkipButton.Visible then
-        hasActivated = false
-        return
-    end
-    
-    -- Проверяем состояние
-    if isButtonOff(autoSkipButton) then
-        -- OFF - включаем
+    -- Пробуем активировать через навигацию
+    if activateViaNavigation() then
+        activated = true
         if toggleStates["Notifications"] then
-            warn("🔴 [AUTO SKIP] OFF, включаю...")
-        end
-        
-        if clickButton(autoSkipButton) then
-            if toggleStates["Notifications"] then
-                warn("⏭️ [AUTO SKIP] Клик выполнен!")
-            end
-            
-            task.wait(0.5)
-            
-            if not isButtonOff(autoSkipButton) then
-                hasActivated = true
-                if toggleStates["Notifications"] then
-                    print("✅ [AUTO SKIP] ВКЛЮЧЁН!")
-                end
-            else
-                hasActivated = false
-            end
+            print("✅✅✅ [AUTO SKIP] АКТИВИРОВАН ЧЕРЕЗ UI НАВИГАЦИЮ!")
         end
     else
-        -- ON - ничего не делаем
-        if not hasActivated and toggleStates["Notifications"] then
-            print("✅ [AUTO SKIP] Уже ON")
+        if toggleStates["Notifications"] then
+            warn("⚠️ [AUTO SKIP] Не сработало, повтор через", RETRY_INTERVAL, "сек")
         end
-        hasActivated = true
     end
+end)
+
+-- Обновление при изменении GUI
+gui.DescendantAdded:Connect(function()
+    task.wait(1)
+    activated = false
 end)
 
 -- Респавн
 player.CharacterAdded:Connect(function()
     task.wait(3)
-    autoSkipButton = nil
-    hasActivated = false
-    lastCheck = 0
+    activated = false
+    lastTry = 0
 end)
 
 print("========================================")
-print("✅ AUTO SKIP (FIXED - NO .Text ERRORS)")
+print("✅ AUTO SKIP (PURE UI NAVIGATION)")
+print("   Method:")
+print("   1. Set Selectable = true")
+print("   2. GuiService.SelectedObject = button")
+print("   3. Fire SelectionGained")
+print("   4. Fire Activated + Click events")
+print("   5. Fire SelectionLost")
+print("   6. Clear selection")
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
