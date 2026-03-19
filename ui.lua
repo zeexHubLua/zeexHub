@@ -1576,10 +1576,11 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - БЕЗ СТРЕЛОК (ПРЯМОЙ ВЫБОР)
+-- AUTO SKIP - ПРАВИЛЬНАЯ UI НАВИГАЦИЯ
 -- ==========================================
 
 local GuiService = game:GetService("GuiService")
+local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local player = game:GetService("Players").LocalPlayer
 local gui = player:WaitForChild("PlayerGui")
@@ -1594,7 +1595,23 @@ local function findButton()
     return ok and btn or nil
 end
 
--- Активация через ПРЯМОЙ выбор + getconnections
+-- ВКЛЮЧЕНИЕ UI НАВИГАЦИИ (как геймпад)
+local function enableUINavigation()
+    pcall(function()
+        -- Включаем режим навигации
+        GuiService.AutoSelectGuiEnabled = true
+        GuiService.GuiNavigationEnabled = true
+        
+        -- Включаем геймпад режим (чтобы работала навигация)
+        UserInputService.MouseIconEnabled = true
+        
+        if toggleStates["Notifications"] then
+            print("🎮 [AUTO SKIP] UI Navigation включена")
+        end
+    end)
+end
+
+-- Активация через навигацию
 local function activate()
     local btn = findButton()
     
@@ -1606,55 +1623,76 @@ local function activate()
     end
     
     if toggleStates["Notifications"] then
-        print("🎯 [AUTO SKIP] Активирую кнопку...")
+        print("🎯 [AUTO SKIP] Начинаю активацию...")
     end
     
     local success = false
     
     pcall(function()
-        -- Делаем кнопку выбираемой
+        -- ШАГ 1: ВКЛЮЧАЕМ UI НАВИГАЦИЮ
+        enableUINavigation()
+        task.wait(0.2)
+        
+        -- ШАГ 2: Делаем кнопку доступной для навигации
         btn.Selectable = true
         btn.Active = true
         
-        -- ВЫБИРАЕМ кнопку напрямую
-        GuiService.SelectedObject = btn
-        
         task.wait(0.1)
         
-        -- Проверяем что выбрали
+        -- ШАГ 3: ВЫБИРАЕМ кнопку через GuiService
+        GuiService.SelectedObject = btn
+        
+        task.wait(0.2)
+        
+        -- ШАГ 4: Проверяем что кнопка выбрана
         if GuiService.SelectedObject == btn then
             if toggleStates["Notifications"] then
-                print("✅ [AUTO SKIP] Кнопка выбрана!")
+                print("✅ [AUTO SKIP] Кнопка выбрана через навигацию!")
             end
             
-            -- Фаерим все события
-            for _, conn in pairs(getconnections(btn.Activated)) do
-                conn:Fire()
-                success = true
-            end
+            task.wait(0.1)
             
-            for _, conn in pairs(getconnections(btn.MouseButton1Click)) do
-                conn:Fire()
-                success = true
-            end
+            -- ШАГ 5: Активируем события (как нажатие Enter на выбранной кнопке)
             
-            for _, conn in pairs(getconnections(btn.MouseButton1Down)) do
-                conn:Fire()
+            -- SelectionGained
+            if btn.SelectionGained then
+                for _, conn in pairs(getconnections(btn.SelectionGained)) do
+                    pcall(function() conn:Fire() end)
+                end
             end
             
             task.wait(0.05)
             
-            for _, conn in pairs(getconnections(btn.MouseButton1Up)) do
-                conn:Fire()
+            -- Activated (главное событие при навигации)
+            for _, conn in pairs(getconnections(btn.Activated)) do
+                pcall(function() 
+                    conn:Fire()
+                    success = true
+                end)
+            end
+            
+            task.wait(0.05)
+            
+            -- MouseButton1Click (дополнительно)
+            for _, conn in pairs(getconnections(btn.MouseButton1Click)) do
+                pcall(function() 
+                    conn:Fire()
+                    success = true
+                end)
             end
             
             if toggleStates["Notifications"] then
                 warn("⏭️ [AUTO SKIP] События активированы!")
             end
+        else
+            if toggleStates["Notifications"] then
+                warn("❌ [AUTO SKIP] Кнопка не выбралась")
+                print("   Выбрано:", GuiService.SelectedObject)
+            end
         end
         
-        -- Убираем выбор
-        task.wait(0.1)
+        -- ШАГ 6: Очищаем выбор
+        task.wait(0.2)
         GuiService.SelectedObject = nil
         btn.Selectable = false
     end)
@@ -1680,21 +1718,23 @@ conn = RunService.Heartbeat:Connect(function()
     
     local now = tick()
     
-    if now - lastTry < 3 then
+    if now - lastTry < 4 then
         return
     end
     
     lastTry = now
     
     -- Пробуем активировать
-    if activate() then
+    local success = activate()
+    
+    if success then
         activated = true
         if toggleStates["Notifications"] then
-            print("✅ [AUTO SKIP] Успешно активирован!")
+            print("✅ [AUTO SKIP] УСПЕШНО АКТИВИРОВАН!")
         end
     else
         if toggleStates["Notifications"] then
-            warn("❌ [AUTO SKIP] Не удалось активировать, повтор через 3 сек")
+            warn("⚠️ [AUTO SKIP] Не удалось, повтор через 4 сек")
         end
     end
 end)
@@ -1707,9 +1747,10 @@ player.CharacterAdded:Connect(function()
 end)
 
 print("========================================")
-print("✅ AUTO SKIP (NO ARROWS)")
-print("   Method: Direct GuiService.SelectedObject")
-print("   + getconnections Fire")
+print("✅ AUTO SKIP (PROPER UI NAV)")
+print("   1. Enable UI Navigation")
+print("   2. Select button via GuiService")
+print("   3. Fire Activated event")
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
