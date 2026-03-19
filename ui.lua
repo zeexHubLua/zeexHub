@@ -1576,10 +1576,9 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - ОДИН МЕТОД (РЕАЛЬНЫЙ ВЫБОР)
+-- AUTO SKIP - ВЫЗОВ ФУНКЦИИ НАПРЯМУЮ
 -- ==========================================
 
-local GuiService = game:GetService("GuiService")
 local RunService = game:GetService("RunService")
 local player = game:GetService("Players").LocalPlayer
 local gui = player:WaitForChild("PlayerGui")
@@ -1598,7 +1597,7 @@ local function findButton()
     return nil
 end
 
--- АКТИВАЦИЯ
+-- АКТИВАЦИЯ - ВЫЗОВ ФУНКЦИИ
 local function activate()
     local btn = findButton()
     
@@ -1610,58 +1609,47 @@ local function activate()
     end
     
     if toggleStates["Notifications"] then
-        warn("🔥 АКТИВИРУЮ...")
-        print("Кнопка:", btn:GetFullName())
+        warn("🔥 ВЫЗЫВАЮ ФУНКЦИЮ MouseButton1Click...")
     end
     
+    local success = false
+    
     pcall(function()
-        -- Делаем выбираемой
-        btn.Selectable = true
-        btn.Active = true
+        -- Получаем соединения MouseButton1Click
+        local connections = getconnections(btn.MouseButton1Click)
         
-        task.wait(0.15)
+        if toggleStates["Notifications"] then
+            print("   Соединений найдено:", #connections)
+        end
         
-        -- ВЫБИРАЕМ
-        GuiService.SelectedObject = btn
-        
-        task.wait(0.2)
-        
-        -- Проверка
-        if GuiService.SelectedObject == btn then
-            if toggleStates["Notifications"] then
-                print("✅ Выбрана!")
-            end
-            
-            task.wait(0.2)
-            
-            -- АКТИВИРУЕМ (как Enter)
-            for _, conn in pairs(getconnections(btn.Activated)) do
-                conn:Fire()
-                if toggleStates["Notifications"] then
-                    warn("🔥 Activated fired! Соединений:", #getconnections(btn.Activated))
-                end
-            end
-            
-            task.wait(0.1)
-            
-            for _, conn in pairs(getconnections(btn.MouseButton1Click)) do
-                conn:Fire()
-                if toggleStates["Notifications"] then
-                    warn("🔥 Click fired! Соединений:", #getconnections(btn.MouseButton1Click))
-                end
-            end
-            
-        else
-            if toggleStates["Notifications"] then
-                warn("❌ НЕ выбрана! Сейчас выбрано:", GuiService.SelectedObject)
+        -- Вызываем ФУНКЦИЮ напрямую
+        for i, conn in pairs(connections) do
+            if conn.Function then
+                pcall(function()
+                    -- ВЫЗЫВАЕМ ФУНКЦИЮ
+                    conn.Function()
+                    
+                    success = true
+                    
+                    if toggleStates["Notifications"] then
+                        warn("✅ ФУНКЦИЯ ВЫЗВАНА! (#" .. i .. ")")
+                    end
+                end)
             end
         end
         
-        task.wait(0.2)
-        GuiService.SelectedObject = nil
+        -- Дополнительно: SelectionGained
+        local selConns = getconnections(btn.SelectionGained)
+        for _, conn in pairs(selConns) do
+            if conn.Function then
+                pcall(function()
+                    conn.Function()
+                end)
+            end
+        end
     end)
     
-    return true
+    return success
 end
 
 -- ОДИН РАЗ
@@ -1676,7 +1664,17 @@ conn = RunService.Heartbeat:Connect(function()
     
     if not done then
         task.wait(1)
-        activate()
+        
+        if activate() then
+            if toggleStates["Notifications"] then
+                print("✅✅✅ AUTO SKIP АКТИВИРОВАН!")
+            end
+        else
+            if toggleStates["Notifications"] then
+                warn("❌ НЕ СРАБОТАЛО!")
+            end
+        end
+        
         done = true
     end
 end)
@@ -1688,7 +1686,8 @@ player.CharacterAdded:Connect(function()
 end)
 
 print("========================================")
-print("✅ AUTO SKIP (SIMPLE)")
+print("✅ AUTO SKIP (FUNCTION CALL)")
+print("   Вызывает conn.Function() напрямую")
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
