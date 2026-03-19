@@ -1576,181 +1576,99 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - ПРАВИЛЬНАЯ UI НАВИГАЦИЯ
+-- DEBUG - ИЩЕМ ВСЕ КНОПКИ AUTO
 -- ==========================================
 
-local GuiService = game:GetService("GuiService")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
+task.wait(5)
+
+print("========================================")
+print("🔍 ПОИСК ВСЕХ КНОПОК С 'AUTO' В НАЗВАНИИ")
+print("========================================")
+
 local player = game:GetService("Players").LocalPlayer
 local gui = player:WaitForChild("PlayerGui")
 
-task.wait(3)
-
--- Путь к кнопке
-local function findButton()
-    local ok, btn = pcall(function()
-        return gui.GameGui.Screen.Middle.SandboxMenu.SandboxMenu.Frame.Items.Items.Waves.GoToWave.Items.Items.Button
-    end)
-    return ok and btn or nil
-end
-
--- ВКЛЮЧЕНИЕ UI НАВИГАЦИИ (как геймпад)
-local function enableUINavigation()
-    pcall(function()
-        -- Включаем режим навигации
-        GuiService.AutoSelectGuiEnabled = true
-        GuiService.GuiNavigationEnabled = true
-        
-        -- Включаем геймпад режим (чтобы работала навигация)
-        UserInputService.MouseIconEnabled = true
-        
-        if toggleStates["Notifications"] then
-            print("🎮 [AUTO SKIP] UI Navigation включена")
-        end
-    end)
-end
-
--- Активация через навигацию
-local function activate()
-    local btn = findButton()
-    
-    if not btn or not btn.Visible then
-        if toggleStates["Notifications"] then
-            print("⚠️ [AUTO SKIP] Кнопка не видна")
-        end
-        return false
-    end
-    
-    if toggleStates["Notifications"] then
-        print("🎯 [AUTO SKIP] Начинаю активацию...")
-    end
-    
-    local success = false
-    
-    pcall(function()
-        -- ШАГ 1: ВКЛЮЧАЕМ UI НАВИГАЦИЮ
-        enableUINavigation()
-        task.wait(0.2)
-        
-        -- ШАГ 2: Делаем кнопку доступной для навигации
-        btn.Selectable = true
-        btn.Active = true
-        
-        task.wait(0.1)
-        
-        -- ШАГ 3: ВЫБИРАЕМ кнопку через GuiService
-        GuiService.SelectedObject = btn
-        
-        task.wait(0.2)
-        
-        -- ШАГ 4: Проверяем что кнопка выбрана
-        if GuiService.SelectedObject == btn then
-            if toggleStates["Notifications"] then
-                print("✅ [AUTO SKIP] Кнопка выбрана через навигацию!")
+-- Ищем все что связано с Auto
+for _, obj in pairs(gui:GetDescendants()) do
+    if obj:IsA("TextLabel") then
+        local text = obj.Text:lower()
+        if text:find("auto") then
+            -- Проверяем что это не наш GUI
+            local isOurs = false
+            local parent = obj
+            while parent do
+                if parent.Name == "ZeexHub" then
+                    isOurs = true
+                    break
+                end
+                parent = parent.Parent
             end
             
-            task.wait(0.1)
-            
-            -- ШАГ 5: Активируем события (как нажатие Enter на выбранной кнопке)
-            
-            -- SelectionGained
-            if btn.SelectionGained then
-                for _, conn in pairs(getconnections(btn.SelectionGained)) do
-                    pcall(function() conn:Fire() end)
+            if not isOurs then
+                print("")
+                print("📋 НАЙДЕН:", obj.Text)
+                print("   Path:", obj:GetFullName())
+                print("   Parent:", obj.Parent and obj.Parent.Name or "nil")
+                
+                -- Ищем кнопки рядом
+                if obj.Parent then
+                    print("   Кнопки рядом:")
+                    for _, child in pairs(obj.Parent:GetDescendants()) do
+                        if child:IsA("GuiButton") then
+                            print(string.format("      - %s | Text: '%s' | Selectable: %s", 
+                                child.ClassName,
+                                child.Text or "",
+                                tostring(child.Selectable)
+                            ))
+                            print("        Path:", child:GetFullName())
+                        end
+                    end
                 end
             end
-            
-            task.wait(0.05)
-            
-            -- Activated (главное событие при навигации)
-            for _, conn in pairs(getconnections(btn.Activated)) do
-                pcall(function() 
-                    conn:Fire()
-                    success = true
-                end)
-            end
-            
-            task.wait(0.05)
-            
-            -- MouseButton1Click (дополнительно)
-            for _, conn in pairs(getconnections(btn.MouseButton1Click)) do
-                pcall(function() 
-                    conn:Fire()
-                    success = true
-                end)
-            end
-            
-            if toggleStates["Notifications"] then
-                warn("⏭️ [AUTO SKIP] События активированы!")
-            end
-        else
-            if toggleStates["Notifications"] then
-                warn("❌ [AUTO SKIP] Кнопка не выбралась")
-                print("   Выбрано:", GuiService.SelectedObject)
-            end
         end
-        
-        -- ШАГ 6: Очищаем выбор
-        task.wait(0.2)
-        GuiService.SelectedObject = nil
-        btn.Selectable = false
-    end)
-    
-    return success
+    end
 end
 
--- Таймер
-local lastTry = 0
-local activated = false
-
--- Цикл
-local conn
-conn = RunService.Heartbeat:Connect(function()
-    if not toggleStates or not toggleStates["Auto Skip"] then
-        activated = false
-        return
-    end
-    
-    if activated then
-        return
-    end
-    
-    local now = tick()
-    
-    if now - lastTry < 4 then
-        return
-    end
-    
-    lastTry = now
-    
-    -- Пробуем активировать
-    local success = activate()
-    
-    if success then
-        activated = true
-        if toggleStates["Notifications"] then
-            print("✅ [AUTO SKIP] УСПЕШНО АКТИВИРОВАН!")
-        end
-    else
-        if toggleStates["Notifications"] then
-            warn("⚠️ [AUTO SKIP] Не удалось, повтор через 4 сек")
-        end
-    end
-end)
-
--- Респавн
-player.CharacterAdded:Connect(function()
-    task.wait(3)
-    activated = false
-    lastTry = 0
-end)
-
+print("")
 print("========================================")
-print("✅ AUTO SKIP (PROPER UI NAV)")
-print("   1. Enable UI Navigation")
-print("   2. Select button via GuiService")
-print("   3. Fire Activated event")
+print("🔍 ПРОВЕРЯЮ ИЗВЕСТНЫЙ PATH...")
+print("========================================")
+
+local knownPath = "GameGui.Screen.Middle.SandboxMenu.SandboxMenu.Frame.Items.Items.Waves.GoToWave.Items.Items.Button"
+local parts = string.split(knownPath, ".")
+local current = gui
+
+for i, part in ipairs(parts) do
+    current = current:FindFirstChild(part)
+    if not current then
+        print("❌ Путь оборвался на:", part)
+        print("   Индекс:", i)
+        break
+    end
+end
+
+if current then
+    print("✅ Кнопка по известному пути НАЙДЕНА!")
+    print("   Full path:", current:GetFullName())
+    print("   ClassName:", current.ClassName)
+    print("   Text:", current.Text or "нет")
+    print("   Visible:", current.Visible)
+    print("   Active:", current.Active)
+    print("   Selectable:", current.Selectable)
+    print("   Parent:", current.Parent and current.Parent.Name or "nil")
+    
+    -- Смотрим что рядом с ней
+    if current.Parent then
+        print("")
+        print("   Соседи (siblings):")
+        for _, sibling in pairs(current.Parent:GetChildren()) do
+            if sibling ~= current then
+                print(string.format("      - %s (%s)", sibling.Name, sibling.ClassName))
+            end
+        end
+    end
+end
+
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
