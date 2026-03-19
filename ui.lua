@@ -1575,257 +1575,38 @@ toggleSetters["AutoSave"](true, true)
 toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
--- ==========================================
--- AUTO SKIP - INPUT EVENTS METHOD
--- ==========================================
+task.wait(5)
 
-local UserInputService = game:GetService("UserInputService")
-local GuiService = game:GetService("GuiService")
-local RunService = game:GetService("RunService")
-local player = game:GetService("Players").LocalPlayer
-local gui = player:WaitForChild("PlayerGui")
+local btn = game:GetService("Players").LocalPlayer.PlayerGui.GameGui.Screen.Middle.SandboxMenu.SandboxMenu.Frame.Items.Items.Waves.GoToWave.Items.Items.Button
 
-task.wait(3)
-
--- Находим кнопку Auto Skip
-local function findAutoSkipButton()
-    local ok, btn = pcall(function()
-        return gui.GameGui.Screen.Middle.SandboxMenu.SandboxMenu.Frame.Items.Items.Waves.GoToWave.Items.Items.Button
-    end)
-    
-    if ok and btn and btn.Parent then
-        local size = btn.AbsoluteSize
-        if size.X > 90 and size.X < 120 and size.Y > 20 and size.Y < 35 then
-            return btn
+if btn then
+    print("========================================")
+    print("📊 ИНФОРМАЦИЯ О КНОПКЕ AUTO SKIP:")
+    print("========================================")
+    print("ClassName:", btn.ClassName)
+    print("Name:", btn.Name)
+    print("Text:", btn.Text or "нет")
+    print("Size:", btn.Size)
+    print("Position:", btn.Position)
+    print("BackgroundColor3:", btn.BackgroundColor3)
+    print("Visible:", btn.Visible)
+    print("Active:", btn.Active)
+    print("")
+    print("Дочерние элементы:")
+    for i, child in pairs(btn:GetChildren()) do
+        print(string.format("  %d. %s (%s)", i, child.Name, child.ClassName))
+        if child:IsA("Frame") or child:IsA("ImageLabel") then
+            print("     Color:", child.BackgroundColor3 or child.ImageColor3)
+            print("     Position:", child.Position)
         end
     end
-    
-    return nil
+    print("")
+    print("События:")
+    print("  MouseButton1Click:", #getconnections(btn.MouseButton1Click))
+    print("  Activated:", #getconnections(btn.Activated))
+    print("  MouseButton1Down:", #getconnections(btn.MouseButton1Down))
+    print("========================================")
 end
-
--- Активация через InputBegan/InputEnded события
-local function activateViaInputEvents(button)
-    if not button or not button.Visible then
-        return false
-    end
-    
-    if toggleStates["Notifications"] then
-        print("🎯 [AUTO SKIP] Активирую через Input события...")
-    end
-    
-    local success = false
-    
-    pcall(function()
-        -- Делаем кнопку активной
-        button.Active = true
-        button.Selectable = true
-        
-        task.wait(0.1)
-        
-        -- Фаерим InputBegan (начало нажатия)
-        if button.InputBegan then
-            for _, conn in pairs(getconnections(button.InputBegan)) do
-                pcall(function()
-                    conn:Fire()
-                end)
-            end
-        end
-        
-        task.wait(0.05)
-        
-        -- Фаерим TouchTap (для мобильных, но работает везде)
-        if button.TouchTap then
-            for _, conn in pairs(getconnections(button.TouchTap)) do
-                pcall(function()
-                    conn:Fire()
-                    success = true
-                end)
-            end
-        end
-        
-        -- Фаерим MouseEnter (наведение мыши)
-        if button.MouseEnter then
-            for _, conn in pairs(getconnections(button.MouseEnter)) do
-                pcall(function()
-                    conn:Fire()
-                end)
-            end
-        end
-        
-        task.wait(0.05)
-        
-        -- Фаерим MouseButton1Down
-        if button.MouseButton1Down then
-            for _, conn in pairs(getconnections(button.MouseButton1Down)) do
-                pcall(function()
-                    conn:Fire()
-                    success = true
-                end)
-            end
-        end
-        
-        task.wait(0.08)
-        
-        -- Фаерим MouseButton1Up
-        if button.MouseButton1Up then
-            for _, conn in pairs(getconnections(button.MouseButton1Up)) do
-                pcall(function()
-                    conn:Fire()
-                    success = true
-                end)
-            end
-        end
-        
-        task.wait(0.05)
-        
-        -- Фаерим MouseButton1Click
-        if button.MouseButton1Click then
-            for _, conn in pairs(getconnections(button.MouseButton1Click)) do
-                pcall(function()
-                    conn:Fire()
-                    success = true
-                end)
-            end
-        end
-        
-        -- Фаерим Activated
-        if button.Activated then
-            for _, conn in pairs(getconnections(button.Activated)) do
-                pcall(function()
-                    conn:Fire()
-                    success = true
-                end)
-            end
-        end
-        
-        task.wait(0.05)
-        
-        -- Фаерим InputEnded (конец нажатия)
-        if button.InputEnded then
-            for _, conn in pairs(getconnections(button.InputEnded)) do
-                pcall(function()
-                    conn:Fire()
-                end)
-            end
-        end
-        
-        -- Фаерим MouseLeave (уход мыши)
-        if button.MouseLeave then
-            for _, conn in pairs(getconnections(button.MouseLeave)) do
-                pcall(function()
-                    conn:Fire()
-                end)
-            end
-        end
-        
-        if toggleStates["Notifications"] then
-            warn("⏭️ [AUTO SKIP] Все Input события активированы!")
-        end
-    end)
-    
-    return success
-end
-
--- Альтернативный метод - через RemoteEvent (если кнопка шлёт сигнал на сервер)
-local function tryFindRemote(button)
-    -- Ищем RemoteEvent/RemoteFunction связанные с кнопкой
-    for _, conn in pairs(getconnections(button.MouseButton1Click)) do
-        pcall(function()
-            local func = conn.Function
-            if func then
-                -- Пробуем вызвать функцию напрямую
-                func()
-                if toggleStates["Notifications"] then
-                    print("🔧 [AUTO SKIP] Вызвана функция обработчика")
-                end
-            end
-        end)
-    end
-end
-
--- Главная функция активации
-local function activate()
-    local btn = findAutoSkipButton()
-    
-    if not btn then
-        if toggleStates["Notifications"] then
-            print("⚠️ [AUTO SKIP] Кнопка не найдена")
-        end
-        return false
-    end
-    
-    if toggleStates["Notifications"] then
-        print("✅ [AUTO SKIP] Кнопка найдена, попытка активации...")
-    end
-    
-    -- Пробуем метод 1: Input события
-    local success = activateViaInputEvents(btn)
-    
-    task.wait(0.2)
-    
-    -- Пробуем метод 2: Прямой вызов функции
-    if not success then
-        tryFindRemote(btn)
-        success = true
-    end
-    
-    return success
-end
-
--- Переменные
-local activated = false
-local lastTry = 0
-
--- Главный цикл
-local conn
-conn = RunService.Heartbeat:Connect(function()
-    if not toggleStates or not toggleStates["Auto Skip"] then
-        activated = false
-        return
-    end
-    
-    if activated then
-        return
-    end
-    
-    local now = tick()
-    
-    if now - lastTry < 4 then
-        return
-    end
-    
-    lastTry = now
-    
-    -- Пробуем активировать
-    if activate() then
-        activated = true
-        if toggleStates["Notifications"] then
-            print("✅✅✅ [AUTO SKIP] ПОПЫТКА ЗАВЕРШЕНА!")
-        end
-        
-        -- Ждём 2 секунды и проверяем сработало ли
-        task.wait(2)
-        
-        -- Можно попробовать ещё раз если нужно
-        -- activated = false
-    end
-end)
-
--- Респавн
-player.CharacterAdded:Connect(function()
-    task.wait(3)
-    activated = false
-    lastTry = 0
-end)
-
-print("========================================")
-print("✅ AUTO SKIP (INPUT EVENTS METHOD)")
-print("   Full event sequence:")
-print("   InputBegan -> TouchTap -> MouseEnter")
-print("   -> MouseButton1Down -> MouseButton1Up")
-print("   -> MouseButton1Click -> Activated")
-print("   -> InputEnded -> MouseLeave")
-print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
 print("⚡ by zeenixxs")
