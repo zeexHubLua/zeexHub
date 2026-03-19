@@ -1576,7 +1576,7 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - KEYBOARD NAVIGATION (ИСПРАВЛЕНО)
+-- AUTO SKIP - ПРОСТО TAB -> СТРЕЛКИ -> ENTER
 -- ==========================================
 
 local VirtualInputManager = game:GetService("VirtualInputManager")
@@ -1588,136 +1588,69 @@ local gui = player:WaitForChild("PlayerGui")
 task.wait(3)
 
 -- Нажатие клавиши
-local function pressKey(key, holdTime)
-    holdTime = holdTime or 0.05
+local function pressKey(key)
     VirtualInputManager:SendKeyEvent(true, key, false, game)
-    task.wait(holdTime)
+    task.wait(0.05)
     VirtualInputManager:SendKeyEvent(false, key, false, game)
-    task.wait(0.1)
+    task.wait(0.15)
 end
 
 -- Путь к кнопке
-local AUTO_SKIP_PATH = "GameGui.Screen.Middle.SandboxMenu.SandboxMenu.Frame.Items.Items.Waves.GoToWave.Items.Items.Button"
-
--- Поиск кнопки
 local function findButton()
-    local parts = string.split(AUTO_SKIP_PATH, ".")
-    local current = gui
-    
-    for _, part in ipairs(parts) do
-        current = current:FindFirstChild(part)
-        if not current then return nil end
-    end
-    
-    return current
+    local ok, btn = pcall(function()
+        return gui.GameGui.Screen.Middle.SandboxMenu.SandboxMenu.Frame.Items.Items.Waves.GoToWave.Items.Items.Button
+    end)
+    return ok and btn or nil
 end
 
--- ИСПРАВЛЕНО: Проверка состояния кнопки
-local function isButtonOff(button)
-    if not button then return true end
+-- Активация через навигацию
+local function activate()
+    local btn = findButton()
     
-    -- Способ 1: Проверка текста кнопки
-    if button.Text and button.Text ~= "" then
-        local text = button.Text:lower()
-        if text:find("off") or text:find("выкл") then
-            return true -- Выключена
-        end
-        if text:find("on") or text:find("вкл") then
-            return false -- Включена
-        end
-    end
-    
-    -- Способ 2: Проверка цвета (ТЁМНЫЙ = OFF, ЯРКИЙ = ON)
-    local color = button.BackgroundColor3
-    local brightness = (color.R + color.G + color.B) / 3
-    
-    -- Если кнопка тёмная (серая) = OFF
-    if brightness < 0.4 then
-        return true
-    end
-    
-    -- Способ 3: Проверка ImageColor3 (для ImageButton)
-    if button:IsA("ImageButton") and button.ImageColor3 then
-        local imgColor = button.ImageColor3
-        local imgBrightness = (imgColor.R + imgColor.G + imgColor.B) / 3
-        if imgBrightness < 0.4 then
-            return true
-        end
-    end
-    
-    -- По умолчанию считаем что включена
-    return false
-end
-
--- Навигация и активация
-local function navigateAndActivate()
-    if toggleStates["Notifications"] then
-        print("🎮 [AUTO SKIP] Начинаю клавиатурную навигацию...")
-    end
-    
-    -- TAB для входа в навигацию
-    pressKey(Enum.KeyCode.Tab)
-    task.wait(0.3)
-    
-    -- Находим кнопку
-    local targetButton = findButton()
-    
-    if not targetButton or not targetButton.Visible then
+    if not btn or not btn.Visible then
         if toggleStates["Notifications"] then
-            warn("⚠️ [AUTO SKIP] Кнопка не найдена!")
+            print("⚠️ [AUTO SKIP] Кнопка не видна")
         end
         return false
     end
     
     if toggleStates["Notifications"] then
-        print("✅ [AUTO SKIP] Кнопка найдена")
-        print("   Цвет:", targetButton.BackgroundColor3)
-        print("   Текст:", targetButton.Text or "нет")
+        print("🎮 [AUTO SKIP] Начинаю навигацию...")
     end
     
-    -- Навигация стрелками
-    local maxAttempts = 50
-    local attempts = 0
+    -- Входим в навигацию
+    pressKey(Enum.KeyCode.Tab)
+    task.wait(0.2)
     
-    while attempts < maxAttempts do
-        attempts = attempts + 1
-        
-        if GuiService.SelectedObject == targetButton then
+    -- Навигация к кнопке
+    for i = 1, 50 do
+        -- Проверяем выбрана ли наша кнопка
+        if GuiService.SelectedObject == btn then
             if toggleStates["Notifications"] then
-                print("🎯 [AUTO SKIP] Кнопка выбрана навигацией!")
+                print("🎯 [AUTO SKIP] Кнопка выбрана!")
             end
             break
         end
         
-        -- Пробуем стрелки
+        -- Жмём стрелки
         pressKey(Enum.KeyCode.Down)
         
-        if GuiService.SelectedObject == targetButton then
-            break
-        end
-        
-        if attempts % 3 == 0 then
+        if i % 3 == 0 then
             pressKey(Enum.KeyCode.Right)
-        end
-        
-        if attempts % 5 == 0 then
-            pressKey(Enum.KeyCode.Left)
         end
     end
     
-    -- Проверка выбора
-    if GuiService.SelectedObject ~= targetButton then
+    -- Проверка
+    if GuiService.SelectedObject ~= btn then
         if toggleStates["Notifications"] then
-            warn("❌ [AUTO SKIP] Не удалось выбрать кнопку стрелками")
-            print("   Выбрано:", GuiService.SelectedObject and GuiService.SelectedObject:GetFullName() or "nil")
+            warn("❌ [AUTO SKIP] Не дошли до кнопки")
         end
         return false
     end
     
-    -- Нажимаем ENTER
-    task.wait(0.3)
-    pressKey(Enum.KeyCode.Return, 0.1)
-    task.wait(0.5)
+    -- Жмём Enter
+    task.wait(0.2)
+    pressKey(Enum.KeyCode.Return)
     
     if toggleStates["Notifications"] then
         warn("⏭️ [AUTO SKIP] Enter нажат!")
@@ -1726,69 +1659,46 @@ local function navigateAndActivate()
     return true
 end
 
--- Переменные
-local hasActivated = false
-local lastAttempt = 0
-local RETRY_INTERVAL = 4.0
+-- Таймер
+local lastTry = 0
+local activated = false
 
--- Главный цикл
+-- Цикл
 local conn
 conn = RunService.Heartbeat:Connect(function()
     if not toggleStates or not toggleStates["Auto Skip"] then
-        hasActivated = false
+        activated = false
+        return
+    end
+    
+    if activated then
         return
     end
     
     local now = tick()
     
-    if now - lastAttempt < RETRY_INTERVAL then
+    if now - lastTry < 5 then
         return
     end
     
-    lastAttempt = now
+    lastTry = now
     
-    -- Находим кнопку
-    local btn = findButton()
-    
-    if not btn or not btn.Visible then
-        hasActivated = false
-        return
-    end
-    
-    -- ИСПРАВЛЕНО: Проверяем ВЫКЛЮЧЕНА ли кнопка
-    if isButtonOff(btn) then
-        -- Кнопка ВЫКЛЮЧЕНА - включаем
-        if toggleStates["Notifications"] then
-            warn("🔴 [AUTO SKIP] Кнопка OFF, включаю...")
-        end
-        
-        local success = navigateAndActivate()
-        
-        if success then
-            hasActivated = true
-            if toggleStates["Notifications"] then
-                print("✅ [AUTO SKIP] Активирована!")
-            end
-        end
-    else
-        -- Кнопка УЖЕ ВКЛЮЧЕНА
-        if not hasActivated and toggleStates["Notifications"] then
-            print("✅ [AUTO SKIP] Уже включена, ничего не делаю")
-        end
-        hasActivated = true
+    -- Пробуем активировать
+    if activate() then
+        activated = true
     end
 end)
 
 -- Респавн
 player.CharacterAdded:Connect(function()
     task.wait(3)
-    hasActivated = false
-    lastAttempt = 0
+    activated = false
+    lastTry = 0
 end)
 
 print("========================================")
-print("✅ AUTO SKIP (KEYBOARD NAV - FIXED)")
-print("   Tab -> Arrows -> Enter")
+print("✅ AUTO SKIP (SIMPLE)")
+print("   Tab -> Down/Right -> Enter")
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
