@@ -1576,19 +1576,19 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - РЕАЛЬНАЯ ПОШАГОВАЯ НАВИГАЦИЯ
+-- AUTO SKIP - INPUT EVENTS METHOD
 -- ==========================================
 
-local GuiService = game:GetService("GuiService")
 local UserInputService = game:GetService("UserInputService")
+local GuiService = game:GetService("GuiService")
 local RunService = game:GetService("RunService")
 local player = game:GetService("Players").LocalPlayer
 local gui = player:WaitForChild("PlayerGui")
 
 task.wait(3)
 
--- Путь к целевой кнопке
-local function findTargetButton()
+-- Находим кнопку Auto Skip
+local function findAutoSkipButton()
     local ok, btn = pcall(function()
         return gui.GameGui.Screen.Middle.SandboxMenu.SandboxMenu.Frame.Items.Items.Waves.GoToWave.Items.Items.Button
     end)
@@ -1603,189 +1603,173 @@ local function findTargetButton()
     return nil
 end
 
--- Находим СТАРТОВУЮ кнопку для навигации (любую видимую и выбираемую)
-local function findStartButton()
-    for _, obj in pairs(gui:GetDescendants()) do
-        if obj:IsA("GuiButton") and obj.Visible and obj.Active then
-            -- Проверяем что кнопка НЕ из нашего GUI
-            local isOurs = false
-            local parent = obj
-            while parent do
-                if parent.Name == "ZeexHub" then
-                    isOurs = true
-                    break
-                end
-                parent = parent.Parent
-            end
-            
-            if not isOurs then
-                -- Делаем выбираемой
-                obj.Selectable = true
-                return obj
+-- Активация через InputBegan/InputEnded события
+local function activateViaInputEvents(button)
+    if not button or not button.Visible then
+        return false
+    end
+    
+    if toggleStates["Notifications"] then
+        print("🎯 [AUTO SKIP] Активирую через Input события...")
+    end
+    
+    local success = false
+    
+    pcall(function()
+        -- Делаем кнопку активной
+        button.Active = true
+        button.Selectable = true
+        
+        task.wait(0.1)
+        
+        -- Фаерим InputBegan (начало нажатия)
+        if button.InputBegan then
+            for _, conn in pairs(getconnections(button.InputBegan)) do
+                pcall(function()
+                    conn:Fire()
+                end)
             end
         end
-    end
-    return nil
-end
-
--- Получаем СОСЕДНИЕ кнопки (NextSelection...)
-local function getNeighbors(button)
-    local neighbors = {}
-    
-    if button.NextSelectionDown then
-        table.insert(neighbors, {dir = "Down", btn = button.NextSelectionDown})
-    end
-    if button.NextSelectionUp then
-        table.insert(neighbors, {dir = "Up", btn = button.NextSelectionUp})
-    end
-    if button.NextSelectionLeft then
-        table.insert(neighbors, {dir = "Left", btn = button.NextSelectionLeft})
-    end
-    if button.NextSelectionRight then
-        table.insert(neighbors, {dir = "Right", btn = button.NextSelectionRight})
-    end
-    
-    return neighbors
-end
-
--- ПОШАГОВАЯ НАВИГАЦИЯ к целевой кнопке
-local function navigateToTarget()
-    local target = findTargetButton()
-    
-    if not target or not target.Visible then
+        
+        task.wait(0.05)
+        
+        -- Фаерим TouchTap (для мобильных, но работает везде)
+        if button.TouchTap then
+            for _, conn in pairs(getconnections(button.TouchTap)) do
+                pcall(function()
+                    conn:Fire()
+                    success = true
+                end)
+            end
+        end
+        
+        -- Фаерим MouseEnter (наведение мыши)
+        if button.MouseEnter then
+            for _, conn in pairs(getconnections(button.MouseEnter)) do
+                pcall(function()
+                    conn:Fire()
+                end)
+            end
+        end
+        
+        task.wait(0.05)
+        
+        -- Фаерим MouseButton1Down
+        if button.MouseButton1Down then
+            for _, conn in pairs(getconnections(button.MouseButton1Down)) do
+                pcall(function()
+                    conn:Fire()
+                    success = true
+                end)
+            end
+        end
+        
+        task.wait(0.08)
+        
+        -- Фаерим MouseButton1Up
+        if button.MouseButton1Up then
+            for _, conn in pairs(getconnections(button.MouseButton1Up)) do
+                pcall(function()
+                    conn:Fire()
+                    success = true
+                end)
+            end
+        end
+        
+        task.wait(0.05)
+        
+        -- Фаерим MouseButton1Click
+        if button.MouseButton1Click then
+            for _, conn in pairs(getconnections(button.MouseButton1Click)) do
+                pcall(function()
+                    conn:Fire()
+                    success = true
+                end)
+            end
+        end
+        
+        -- Фаерим Activated
+        if button.Activated then
+            for _, conn in pairs(getconnections(button.Activated)) do
+                pcall(function()
+                    conn:Fire()
+                    success = true
+                end)
+            end
+        end
+        
+        task.wait(0.05)
+        
+        -- Фаерим InputEnded (конец нажатия)
+        if button.InputEnded then
+            for _, conn in pairs(getconnections(button.InputEnded)) do
+                pcall(function()
+                    conn:Fire()
+                end)
+            end
+        end
+        
+        -- Фаерим MouseLeave (уход мыши)
+        if button.MouseLeave then
+            for _, conn in pairs(getconnections(button.MouseLeave)) do
+                pcall(function()
+                    conn:Fire()
+                end)
+            end
+        end
+        
         if toggleStates["Notifications"] then
-            print("⚠️ [AUTO SKIP] Целевая кнопка не найдена")
+            warn("⏭️ [AUTO SKIP] Все Input события активированы!")
+        end
+    end)
+    
+    return success
+end
+
+-- Альтернативный метод - через RemoteEvent (если кнопка шлёт сигнал на сервер)
+local function tryFindRemote(button)
+    -- Ищем RemoteEvent/RemoteFunction связанные с кнопкой
+    for _, conn in pairs(getconnections(button.MouseButton1Click)) do
+        pcall(function()
+            local func = conn.Function
+            if func then
+                -- Пробуем вызвать функцию напрямую
+                func()
+                if toggleStates["Notifications"] then
+                    print("🔧 [AUTO SKIP] Вызвана функция обработчика")
+                end
+            end
+        end)
+    end
+end
+
+-- Главная функция активации
+local function activate()
+    local btn = findAutoSkipButton()
+    
+    if not btn then
+        if toggleStates["Notifications"] then
+            print("⚠️ [AUTO SKIP] Кнопка не найдена")
         end
         return false
     end
     
     if toggleStates["Notifications"] then
-        print("🎯 [AUTO SKIP] Цель найдена, начинаю навигацию...")
+        print("✅ [AUTO SKIP] Кнопка найдена, попытка активации...")
     end
     
-    -- Включаем UI навигацию
-    GuiService.AutoSelectGuiEnabled = true
-    GuiService.GuiNavigationEnabled = true
+    -- Пробуем метод 1: Input события
+    local success = activateViaInputEvents(btn)
     
     task.wait(0.2)
     
-    -- Делаем целевую кнопку выбираемой
-    target.Selectable = true
-    target.Active = true
-    
-    -- Находим стартовую кнопку
-    local startBtn = findStartButton()
-    
-    if not startBtn then
-        if toggleStates["Notifications"] then
-            warn("❌ [AUTO SKIP] Не найдена стартовая кнопка")
-        end
-        return false
+    -- Пробуем метод 2: Прямой вызов функции
+    if not success then
+        tryFindRemote(btn)
+        success = true
     end
     
-    -- Начинаем с неё
-    GuiService.SelectedObject = startBtn
-    task.wait(0.2)
-    
-    if toggleStates["Notifications"] then
-        print("📍 [AUTO SKIP] Старт:", startBtn.Name)
-    end
-    
-    -- BFS (поиск в ширину) - обход кнопок
-    local visited = {}
-    local queue = {{btn = startBtn, path = {}}}
-    local maxSteps = 100
-    local steps = 0
-    
-    while #queue > 0 and steps < maxSteps do
-        steps = steps + 1
-        
-        local current = table.remove(queue, 1)
-        local currentBtn = current.btn
-        local path = current.path
-        
-        -- Проверяем достигли ли цели
-        if currentBtn == target then
-            if toggleStates["Notifications"] then
-                print("✅ [AUTO SKIP] Путь найден! Шагов:", #path)
-            end
-            
-            -- ПРОХОДИМ ПО ПУТИ
-            GuiService.SelectedObject = startBtn
-            task.wait(0.2)
-            
-            for i, step in ipairs(path) do
-                -- Переходим к следующей кнопке
-                GuiService.SelectedObject = step.btn
-                task.wait(0.15)
-                
-                if toggleStates["Notifications"] then
-                    print(string.format("   Шаг %d: %s -> %s", i, step.dir, step.btn.Name))
-                end
-            end
-            
-            -- Проверяем что дошли
-            if GuiService.SelectedObject == target then
-                if toggleStates["Notifications"] then
-                    print("🎯 [AUTO SKIP] Дошли до цели!")
-                end
-                
-                task.wait(0.2)
-                
-                -- АКТИВИРУЕМ
-                local success = false
-                
-                for _, conn in pairs(getconnections(target.Activated)) do
-                    pcall(function()
-                        conn:Fire()
-                        success = true
-                    end)
-                end
-                
-                for _, conn in pairs(getconnections(target.MouseButton1Click)) do
-                    pcall(function()
-                        conn:Fire()
-                        success = true
-                    end)
-                end
-                
-                if toggleStates["Notifications"] then
-                    warn("⏭️ [AUTO SKIP] Кнопка активирована!")
-                end
-                
-                task.wait(0.2)
-                GuiService.SelectedObject = nil
-                
-                return success
-            end
-        end
-        
-        -- Добавляем в visited
-        visited[currentBtn] = true
-        
-        -- Ищем соседей
-        local neighbors = getNeighbors(currentBtn)
-        
-        for _, neighbor in ipairs(neighbors) do
-            local nextBtn = neighbor.btn
-            
-            if nextBtn and not visited[nextBtn] and nextBtn.Visible and nextBtn.Active then
-                local newPath = {}
-                for _, p in ipairs(path) do
-                    table.insert(newPath, p)
-                end
-                table.insert(newPath, {dir = neighbor.dir, btn = nextBtn})
-                
-                table.insert(queue, {btn = nextBtn, path = newPath})
-            end
-        end
-    end
-    
-    if toggleStates["Notifications"] then
-        warn("❌ [AUTO SKIP] Не удалось дойти до кнопки за", steps, "шагов")
-    end
-    
-    return false
+    return success
 end
 
 -- Переменные
@@ -1806,18 +1790,24 @@ conn = RunService.Heartbeat:Connect(function()
     
     local now = tick()
     
-    if now - lastTry < 5 then
+    if now - lastTry < 4 then
         return
     end
     
     lastTry = now
     
-    -- Пробуем пройти навигацию
-    if navigateToTarget() then
+    -- Пробуем активировать
+    if activate() then
         activated = true
         if toggleStates["Notifications"] then
-            print("✅✅✅ [AUTO SKIP] УСПЕШНО!")
+            print("✅✅✅ [AUTO SKIP] ПОПЫТКА ЗАВЕРШЕНА!")
         end
+        
+        -- Ждём 2 секунды и проверяем сработало ли
+        task.wait(2)
+        
+        -- Можно попробовать ещё раз если нужно
+        -- activated = false
     end
 end)
 
@@ -1829,9 +1819,12 @@ player.CharacterAdded:Connect(function()
 end)
 
 print("========================================")
-print("✅ AUTO SKIP (REAL STEP-BY-STEP NAV)")
-print("   Using BFS to find path")
-print("   NextSelection navigation")
+print("✅ AUTO SKIP (INPUT EVENTS METHOD)")
+print("   Full event sequence:")
+print("   InputBegan -> TouchTap -> MouseEnter")
+print("   -> MouseButton1Down -> MouseButton1Up")
+print("   -> MouseButton1Click -> Activated")
+print("   -> InputEnded -> MouseLeave")
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
