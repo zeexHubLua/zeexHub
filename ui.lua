@@ -1576,7 +1576,7 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - ДЛЯ ImageButton
+-- AUTO SKIP - ИСПРАВЛЕНО (БЕЗ .Text)
 -- ==========================================
 
 local RunService = game:GetService("RunService")
@@ -1591,7 +1591,7 @@ local function findAutoSkipButton()
         return gui.GameGui.Screen.Middle.SandboxMenu.SandboxMenu.Frame.Items.Items.Waves.GoToWave.Items.Items.Button
     end)
     
-    if ok and btn and btn.Parent and btn:IsA("ImageButton") then
+    if ok and btn and btn.Parent then
         local size = btn.AbsoluteSize
         if size.X > 90 and size.X < 120 and size.Y > 20 and size.Y < 35 then
             return btn
@@ -1601,77 +1601,102 @@ local function findAutoSkipButton()
     return nil
 end
 
--- Ищем TextLabel рядом с кнопкой (там текст "Auto Skip: Off/On")
+-- Ищем TextLabel рядом с кнопкой
 local function findTextLabel(button)
     if not button or not button.Parent then return nil end
     
-    -- Проверяем детей Parent
-    for _, child in pairs(button.Parent:GetChildren()) do
-        if child:IsA("TextLabel") and child.Text and child.Text:find("Auto Skip") then
-            return child
+    -- Проверяем детей кнопки
+    for _, child in pairs(button:GetChildren()) do
+        if child:IsA("TextLabel") then
+            local hasText = pcall(function() return child.Text end)
+            if hasText then
+                local text = child.Text or ""
+                if text:find("Auto Skip") then
+                    return child
+                end
+            end
         end
     end
     
-    -- Проверяем детей самой кнопки
-    for _, child in pairs(button:GetChildren()) do
-        if child:IsA("TextLabel") and child.Text and child.Text:find("Auto Skip") then
-            return child
+    -- Проверяем детей Parent
+    if button.Parent then
+        for _, child in pairs(button.Parent:GetChildren()) do
+            if child:IsA("TextLabel") then
+                local hasText = pcall(function() return child.Text end)
+                if hasText then
+                    local text = child.Text or ""
+                    if text:find("Auto Skip") then
+                        return child
+                    end
+                end
+            end
         end
     end
     
     return nil
 end
 
--- Проверяем ВЫКЛЮЧЕНА ли кнопка
+-- Проверяем ВЫКЛЮЧЕНА ли кнопка (только по цвету)
 local function isButtonOff(button)
     if not button then return false end
     
-    -- Способ 1: Ищем TextLabel с текстом
+    -- Проверка по TextLabel если есть
     local textLabel = findTextLabel(button)
     if textLabel then
-        local text = textLabel.Text:lower()
-        if text:find("off") then
-            return true -- Выключена
-        end
-        if text:find("on") then
-            return false -- Включена
+        local ok, text = pcall(function() return textLabel.Text end)
+        if ok and text then
+            if text:lower():find("off") then
+                return true -- OFF
+            end
+            if text:lower():find("on") then
+                return false -- ON
+            end
         end
     end
     
-    -- Способ 2: Проверка по цвету (ImageColor3 для ImageButton)
-    local color = button.ImageColor3 or button.BackgroundColor3
+    -- Проверка по цвету
+    local color = nil
     
-    -- Оранжевый: R высокий, G средний, B низкий
-    if color.R > 0.6 and color.G > 0.3 and color.G < 0.7 and color.B < 0.3 then
-        return true -- Оранжевая = OFF
+    -- Пробуем ImageColor3
+    pcall(function()
+        if button.ImageColor3 then
+            color = button.ImageColor3
+        end
+    end)
+    
+    -- Пробуем BackgroundColor3
+    if not color then
+        pcall(function()
+            if button.BackgroundColor3 then
+                color = button.BackgroundColor3
+            end
+        end)
     end
     
-    -- Зелёный: G высокий
-    if color.G > 0.5 and color.R < 0.5 then
-        return false -- Зелёная = ON
+    if color then
+        -- Оранжевый = OFF (R высокий, G средний, B низкий)
+        if color.R > 0.6 and color.G > 0.3 and color.G < 0.7 and color.B < 0.3 then
+            return true
+        end
+        
+        -- Зелёный = ON (G высокий, R низкий)
+        if color.G > 0.5 and color.R < 0.5 then
+            return false
+        end
     end
     
     -- По умолчанию считаем что выключена
     return true
 end
 
--- КЛИК по кнопке
+-- КЛИК
 local function clickButton(button)
     if not button or not button.Parent or not button.Visible then
         return false
     end
     
     local success = false
-    
     button.Active = true
-    
-    pcall(function()
-        for _, conn in pairs(getconnections(button.MouseEnter)) do
-            conn:Fire()
-        end
-    end)
-    
-    task.wait(0.03)
     
     pcall(function()
         for _, conn in pairs(getconnections(button.MouseButton1Down)) do
@@ -1689,8 +1714,6 @@ local function clickButton(button)
         end
     end)
     
-    task.wait(0.03)
-    
     pcall(function()
         for _, conn in pairs(getconnections(button.MouseButton1Click)) do
             conn:Fire()
@@ -1705,14 +1728,6 @@ local function clickButton(button)
         end
     end)
     
-    task.wait(0.03)
-    
-    pcall(function()
-        for _, conn in pairs(getconnections(button.MouseLeave)) do
-            conn:Fire()
-        end
-    end)
-    
     return success
 end
 
@@ -1720,7 +1735,6 @@ end
 local autoSkipButton = nil
 local lastCheck = 0
 local hasActivated = false
-local CHECK_INTERVAL = 2.0
 
 -- Главный цикл
 local conn
@@ -1732,7 +1746,7 @@ conn = RunService.Heartbeat:Connect(function()
     
     local now = tick()
     
-    if now - lastCheck < CHECK_INTERVAL then
+    if now - lastCheck < 2 then
         return
     end
     
@@ -1750,41 +1764,31 @@ conn = RunService.Heartbeat:Connect(function()
     
     -- Проверяем состояние
     if isButtonOff(autoSkipButton) then
-        -- Кнопка ВЫКЛЮЧЕНА - ВКЛЮЧАЕМ
+        -- OFF - включаем
         if toggleStates["Notifications"] then
-            local textLabel = findTextLabel(autoSkipButton)
-            warn("🔴 [AUTO SKIP] Кнопка OFF, включаю...")
-            if textLabel then
-                print("   Текст:", textLabel.Text)
-            end
-            print("   Цвет:", autoSkipButton.ImageColor3 or autoSkipButton.BackgroundColor3)
+            warn("🔴 [AUTO SKIP] OFF, включаю...")
         end
         
         if clickButton(autoSkipButton) then
-            hasActivated = true
-            
             if toggleStates["Notifications"] then
                 warn("⏭️ [AUTO SKIP] Клик выполнен!")
             end
             
-            -- Проверяем через 0.5 сек
             task.wait(0.5)
             
             if not isButtonOff(autoSkipButton) then
+                hasActivated = true
                 if toggleStates["Notifications"] then
-                    print("✅ [AUTO SKIP] УСПЕШНО ВКЛЮЧЁН!")
+                    print("✅ [AUTO SKIP] ВКЛЮЧЁН!")
                 end
             else
-                if toggleStates["Notifications"] then
-                    warn("⚠️ [AUTO SKIP] Всё ещё OFF, повтор...")
-                end
                 hasActivated = false
             end
         end
     else
-        -- Кнопка УЖЕ ВКЛЮЧЕНА
+        -- ON - ничего не делаем
         if not hasActivated and toggleStates["Notifications"] then
-            print("✅ [AUTO SKIP] Уже включён (зелёная)")
+            print("✅ [AUTO SKIP] Уже ON")
         end
         hasActivated = true
     end
@@ -1799,9 +1803,7 @@ player.CharacterAdded:Connect(function()
 end)
 
 print("========================================")
-print("✅ AUTO SKIP (ImageButton)")
-print("   Ищет TextLabel с 'Auto Skip: Off/On'")
-print("   Проверяет ImageColor3")
+print("✅ AUTO SKIP (FIXED - NO .Text ERRORS)")
 print("========================================")
 
 print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
