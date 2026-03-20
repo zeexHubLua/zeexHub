@@ -1576,7 +1576,7 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - UI NAVIGATION + ENTER
+-- AUTO SKIP - ДВИЖЕНИЕ UI SELECTION BOX
 -- ==========================================
 
 local GuiService = game:GetService("GuiService")
@@ -1608,57 +1608,72 @@ local function activate()
     end
     
     if toggleStates["Notifications"] then
-        warn("🔥 UI Navigation → Enter...")
+        warn("🔥 Двигаю UI Selection до кнопки...")
     end
     
     local success = false
     
     pcall(function()
+        -- ВКЛЮЧАЕМ UI НАВИГАЦИЮ
+        GuiService.GuiNavigationEnabled = true
+        GuiService.CoreGuiNavigationEnabled = true
+        
         -- Делаем кнопку выбираемой
         btn.Selectable = true
         btn.Active = true
         
-        task.wait(0.1)
+        task.wait(0.15)
         
-        -- ВЫБИРАЕМ КНОПКУ (дошли до неё через UI)
-        GuiService.SelectedObject = btn
+        -- ВЫБИРАЕМ КНОПКУ (рамка переместится к ней)
+        GuiService:Select(btn)
         
         task.wait(0.2)
         
-        -- Проверяем что выбрана
+        -- Проверяем что рамка на кнопке
         if GuiService.SelectedObject == btn then
             if toggleStates["Notifications"] then
-                print("✅ Кнопка выбрана через UI навигацию!")
+                print("✅ Selection box на кнопке!")
             end
-            
-            task.wait(0.15)
-            
-            -- ЖМЁМ ENTER (как на клавиатуре)
-            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-            
-            if toggleStates["Notifications"] then
-                warn("⏎ ENTER нажат!")
-            end
-            
-            task.wait(0.1)
-            
-            -- ОТПУСКАЕМ ENTER
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-            
-            success = true
             
             task.wait(0.2)
             
+            -- ЖМЁМ ENTER/SPACE (активация выбранного элемента)
+            if toggleStates["Notifications"] then
+                warn("⏎ Нажимаю RETURN (Enter)...")
+            end
+            
+            -- Return DOWN
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+            task.wait(0.1)
+            -- Return UP
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+            
+            task.wait(0.1)
+            
+            -- Пробуем SPACE тоже (на всякий случай)
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+            task.wait(0.05)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+            
+            success = true
+            
+            if toggleStates["Notifications"] then
+                warn("✅ Клавиши отправлены!")
+            end
+            
+            task.wait(0.3)
+            
         else
             if toggleStates["Notifications"] then
-                warn("❌ Не удалось выбрать кнопку!")
-                print("   SelectedObject:", GuiService.SelectedObject)
+                warn("❌ Selection box не на кнопке!")
+                print("   Сейчас на:", GuiService.SelectedObject)
             end
         end
         
-        -- Очищаем выбор
+        -- Очищаем
         GuiService.SelectedObject = nil
         btn.Selectable = false
+        
     end)
     
     return success
@@ -1699,9 +1714,10 @@ player.CharacterAdded:Connect(function()
 end)
 
 print("========================================")
-print("✅ AUTO SKIP (UI NAV + ENTER)")
-print("   1. GuiService.SelectedObject = button")
-print("   2. VirtualInputManager:SendKeyEvent(ENTER)")
+print("✅ AUTO SKIP (SELECTION BOX)")
+print("   1. Включаем GuiNavigationEnabled")
+print("   2. GuiService:Select(button)")
+print("   3. SendKeyEvent(Return + Space)")
 print("========================================")
 
 print("📋 Configs:", #configs, "| 📄 Macros:", #macros)
