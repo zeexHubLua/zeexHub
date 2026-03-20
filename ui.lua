@@ -1576,7 +1576,7 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - МЕТОД РАЗРАБОТЧИКА
+-- AUTO SKIP - С Selectable = true
 -- ==========================================
 
 local GuiService = game:GetService("GuiService")
@@ -1607,32 +1607,43 @@ local function activate()
     end
     
     if toggleStates["Notifications"] then
-        warn("🔥 Активирую через GuiService.SelectedObject...")
+        warn("🔥 Активирую Auto Skip...")
     end
     
     pcall(function()
-        -- ПРОСТО ВЫБИРАЕМ - ИГРА САМА АКТИВИРУЕТ!
+        -- ВАЖНО: Делаем кнопку Selectable!
+        btn.Selectable = true
+        btn.Active = true
+        
+        task.wait(0.15)
+        
+        -- ВЫБИРАЕМ
         GuiService.SelectedObject = btn
         
         if toggleStates["Notifications"] then
-            print("✅ SelectedObject установлен!")
+            if GuiService.SelectedObject == btn then
+                print("✅ Кнопка ВЫБРАНА!")
+            else
+                warn("❌ Кнопка НЕ выбрана! Текущий SelectedObject:", GuiService.SelectedObject)
+            end
         end
         
-        -- Держим выбор 0.5 сек
+        -- Держим 0.5 сек чтобы игра обработала
         task.wait(0.5)
         
         -- Убираем выбор
         GuiService.SelectedObject = nil
+        btn.Selectable = false
         
         if toggleStates["Notifications"] then
-            warn("✅✅✅ AUTO SKIP АКТИВИРОВАН!")
+            warn("✅✅✅ AUTO SKIP завершён!")
         end
     end)
     
     return true
 end
 
--- ОДИН РАЗ при включении
+-- ОДИН РАЗ
 local done = false
 
 RunService.Heartbeat:Connect(function()
@@ -1655,12 +1666,12 @@ player.CharacterAdded:Connect(function()
 end)
 
 print("========================================")
-print("✅ AUTO SKIP (DEVELOPER METHOD)")
-print("   GuiService.SelectedObject = button")
-print("   NO Fire, NO Function call")
-print("   JUST SELECT!")
+print("✅ AUTO SKIP (FIXED)")
+print("   1. Selectable = true")
+print("   2. GuiService.SelectedObject = button")
+print("   3. wait 0.5s")
+print("   4. Clear selection")
 print("========================================")
 
-print("⚡ by zeenixxs")
 print("📋 Configs:", #configs, "| 📄 Macros:", #macros)
 print("========================================")
