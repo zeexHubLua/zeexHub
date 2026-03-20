@@ -1576,17 +1576,17 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - ПОСЛЕДНЯЯ ПОПЫТКА (ВСЕ МЕТОДЫ)
+-- AUTO SKIP - МЕТОД РАЗРАБОТЧИКА
 -- ==========================================
 
 local GuiService = game:GetService("GuiService")
-local VirtualUser = game:GetService("VirtualUser")
 local RunService = game:GetService("RunService")
 local player = game:GetService("Players").LocalPlayer
 local gui = player:WaitForChild("PlayerGui")
 
 task.wait(3)
 
+-- Путь к кнопке
 local function findButton()
     local ok, btn = pcall(function()
         return gui.GameGui.Screen.Middle.SandboxMenu.SandboxMenu.Frame.Items.Items.Waves.GoToWave.Items.Items.Button
@@ -1595,197 +1595,44 @@ local function findButton()
     return nil
 end
 
--- МЕТОД 1: VirtualUser (реальный клик мыши)
-local function method1()
+-- АКТИВАЦИЯ
+local function activate()
     local btn = findButton()
-    if not btn or not btn.Visible then return false end
     
-    if toggleStates["Notifications"] then
-        warn("🔥 МЕТОД 1: VirtualUser.Button1Down")
-    end
-    
-    pcall(function()
-        local pos = btn.AbsolutePosition
-        local size = btn.AbsoluteSize
-        local centerX = pos.X + size.X / 2
-        local centerY = pos.Y + size.Y / 2
-        
-        -- РЕАЛЬНЫЙ КЛИК МЫШИ В ЦЕНТР КНОПКИ
-        VirtualUser:Button1Down(Vector2.new(centerX, centerY))
-        task.wait(0.1)
-        VirtualUser:Button1Up(Vector2.new(centerX, centerY))
-        
+    if not btn or not btn.Visible then
         if toggleStates["Notifications"] then
-            warn("   ✅ Клик в позицию:", centerX, centerY)
+            warn("❌ Кнопка не найдена")
         end
-    end)
-    
-    return true
-end
-
--- МЕТОД 2: Прямой вызов функций всех событий
-local function method2()
-    local btn = findButton()
-    if not btn or not btn.Visible then return false end
-    
-    if toggleStates["Notifications"] then
-        warn("🔥 МЕТОД 2: Вызов всех Function")
+        return false
     end
     
-    local called = false
-    
-    pcall(function()
-        btn.Active = true
-        
-        -- Все события по порядку
-        local events = {
-            "MouseEnter",
-            "MouseButton1Down",
-            "MouseButton1Up", 
-            "MouseButton1Click",
-            "Activated",
-            "MouseLeave"
-        }
-        
-        for _, eventName in ipairs(events) do
-            local conns = getconnections(btn[eventName])
-            for _, conn in pairs(conns) do
-                if conn.Function then
-                    pcall(function()
-                        conn.Function()
-                        called = true
-                    end)
-                end
-            end
-            task.wait(0.05)
-        end
-    end)
-    
-    if called and toggleStates["Notifications"] then
-        warn("   ✅ Функции вызваны")
-    end
-    
-    return called
-end
-
--- МЕТОД 3: UI Navigation + Fire
-local function method3()
-    local btn = findButton()
-    if not btn or not btn.Visible then return false end
-    
     if toggleStates["Notifications"] then
-        warn("🔥 МЕТОД 3: UI Navigation + Fire")
+        warn("🔥 Активирую через GuiService.SelectedObject...")
     end
     
     pcall(function()
-        btn.Selectable = true
-        btn.Active = true
-        
+        -- ПРОСТО ВЫБИРАЕМ - ИГРА САМА АКТИВИРУЕТ!
         GuiService.SelectedObject = btn
-        task.wait(0.2)
-        
-        if GuiService.SelectedObject == btn then
-            -- Fire всех событий
-            for _, conn in pairs(getconnections(btn.Activated)) do
-                conn:Fire()
-            end
-            
-            for _, conn in pairs(getconnections(btn.MouseButton1Click)) do
-                conn:Fire()
-            end
-            
-            if toggleStates["Notifications"] then
-                warn("   ✅ События Fire'd")
-            end
-        end
-        
-        GuiService.SelectedObject = nil
-    end)
-    
-    return true
-end
-
--- МЕТОД 4: firesignal
-local function method4()
-    local btn = findButton()
-    if not btn or not btn.Visible then return false end
-    
-    if toggleStates["Notifications"] then
-        warn("🔥 МЕТОД 4: firesignal")
-    end
-    
-    if firesignal then
-        pcall(function()
-            firesignal(btn.MouseButton1Down)
-            task.wait(0.05)
-            firesignal(btn.MouseButton1Up)
-            task.wait(0.05)
-            firesignal(btn.MouseButton1Click)
-            firesignal(btn.Activated)
-            
-            if toggleStates["Notifications"] then
-                warn("   ✅ firesignal выполнен")
-            end
-        end)
-        return true
-    end
-    
-    return false
-end
-
--- МЕТОД 5: GuiButton.MouseButton1Click:Fire() напрямую
-local function method5()
-    local btn = findButton()
-    if not btn or not btn.Visible then return false end
-    
-    if toggleStates["Notifications"] then
-        warn("🔥 МЕТОД 5: Direct Fire")
-    end
-    
-    pcall(function()
-        btn.MouseButton1Click:Fire()
-        btn.Activated:Fire()
         
         if toggleStates["Notifications"] then
-            warn("   ✅ Direct Fire выполнен")
+            print("✅ SelectedObject установлен!")
+        end
+        
+        -- Держим выбор 0.5 сек
+        task.wait(0.5)
+        
+        -- Убираем выбор
+        GuiService.SelectedObject = nil
+        
+        if toggleStates["Notifications"] then
+            warn("✅✅✅ AUTO SKIP АКТИВИРОВАН!")
         end
     end)
     
     return true
 end
 
--- ЗАПУСКАЕМ ВСЕ МЕТОДЫ
-local function tryAll()
-    if toggleStates["Notifications"] then
-        print("========================================")
-        warn("🚀 ЗАПУСКАЮ ВСЕ 5 МЕТОДОВ!")
-        print("========================================")
-    end
-    
-    method1()
-    task.wait(0.3)
-    
-    method2()
-    task.wait(0.3)
-    
-    method3()
-    task.wait(0.3)
-    
-    method4()
-    task.wait(0.3)
-    
-    method5()
-    
-    if toggleStates["Notifications"] then
-        print("========================================")
-        warn("✅ ВСЕ МЕТОДЫ ВЫПОЛНЕНЫ!")
-        print("Если не сработало - игра использует")
-        print("защиту или серверную проверку")
-        print("========================================")
-    end
-end
-
--- ОДИН РАЗ
+-- ОДИН РАЗ при включении
 local done = false
 
 RunService.Heartbeat:Connect(function()
@@ -1796,27 +1643,24 @@ RunService.Heartbeat:Connect(function()
     
     if not done then
         task.wait(1)
-        tryAll()
+        activate()
         done = true
     end
 end)
 
+-- Респавн
 player.CharacterAdded:Connect(function()
     task.wait(3)
     done = false
 end)
 
 print("========================================")
-print("✅ AUTO SKIP - ФИНАЛЬНАЯ ВЕРСИЯ")
-print("   5 РАЗНЫХ МЕТОДОВ:")
-print("   1. VirtualUser (реальный клик)")
-print("   2. Function вызовы")
-print("   3. UI Navigation + Fire")
-print("   4. firesignal")
-print("   5. Direct Fire")
+print("✅ AUTO SKIP (DEVELOPER METHOD)")
+print("   GuiService.SelectedObject = button")
+print("   NO Fire, NO Function call")
+print("   JUST SELECT!")
 print("========================================")
 
-print("✅ ZeexHub загружен  |  " .. (isMobile and "📱 Mobile" or "🖥️ PC"))
 print("⚡ by zeenixxs")
 print("📋 Configs:", #configs, "| 📄 Macros:", #macros)
 print("========================================")
