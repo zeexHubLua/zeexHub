@@ -1576,11 +1576,11 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - UI NAVIGATION MODE
+-- AUTO SKIP - IGNORE WARNING + SELECT
 -- ==========================================
 
 local GuiService = game:GetService("GuiService")
-local UserGameSettings = UserSettings():GetService("UserGameSettings")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local RunService = game:GetService("RunService")
 local player = game:GetService("Players").LocalPlayer
 local gui = player:WaitForChild("PlayerGui")
@@ -1595,46 +1595,63 @@ local function activate()
     end)
     
     if not btn or not btn.Visible then
+        if toggleStates and toggleStates["Notifications"] then
+            warn("❌ Кнопка не найдена")
+        end
         return false
     end
     
+    local success = false
+    
     pcall(function()
-        -- ВКЛЮЧАЕМ UI NAVIGATION MODE
-        GuiService.AutoSelectGuiEnabled = true
-        GuiService.GuiNavigationEnabled = true
+        -- Делаем Selectable (уже true, но на всякий)
+        btn.Selectable = true
+        btn.Active = true
         
-        -- Сохраняем старый режим
-        local oldRotation = UserGameSettings.RotationType
+        task.wait(0.1)
         
-        -- ПЕРЕКЛЮЧАЕМ В UI MODE (как backslash)
-        UserGameSettings.RotationType = Enum.RotationType.CameraRelative
-        
-        task.wait(0.2)
-        
-        -- ВЫБИРАЕМ КНОПКУ
+        -- ВЫБИРАЕМ (игнорим warning)
         GuiService.SelectedObject = btn
         
         task.wait(0.3)
         
-        -- ENTER
-        game:GetService("VirtualInputManager"):SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-        task.wait(0.05)
-        game:GetService("VirtualInputManager"):SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-        
-        task.wait(0.2)
-        
-        -- ВЫКЛЮЧАЕМ UI MODE
-        UserGameSettings.RotationType = oldRotation
-        GuiService.SelectedObject = nil
-        
-        if toggleStates and toggleStates["Notifications"] then
-            print("✅ Auto Skip (UI Navigation Mode)")
+        -- Проверяем что РЕАЛЬНО выбрана
+        if GuiService.SelectedObject == btn then
+            if toggleStates and toggleStates["Notifications"] then
+                print("✅ Кнопка выбрана (warning игнорирован)")
+            end
+            
+            task.wait(0.2)
+            
+            -- ENTER DOWN
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+            
+            task.wait(0.1)
+            
+            -- ENTER UP
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+            
+            success = true
+            
+            if toggleStates and toggleStates["Notifications"] then
+                warn("✅ ENTER отправлен!")
+            end
+            
+            task.wait(0.3)
+        else
+            if toggleStates and toggleStates["Notifications"] then
+                warn("❌ Кнопка НЕ выбрана!")
+            end
         end
+        
+        -- Очистка
+        GuiService.SelectedObject = nil
     end)
     
-    return true
+    return success
 end
 
+-- ОДИН РАЗ
 local done = false
 
 RunService.Heartbeat:Connect(function()
@@ -1645,17 +1662,30 @@ RunService.Heartbeat:Connect(function()
     
     if not done then
         task.wait(1)
-        activate()
+        
+        if activate() then
+            if toggleStates and toggleStates["Notifications"] then
+                print("========================================")
+                warn("✅✅✅ AUTO SKIP АКТИВИРОВАН!")
+                print("========================================")
+            end
+        end
+        
         done = true
     end
 end)
 
+-- Респавн
 player.CharacterAdded:Connect(function()
     task.wait(3)
     done = false
 end)
 
-print("✅ AUTO SKIP (UI NAV MODE)")
+print("========================================")
+print("✅ AUTO SKIP")
+print("   1. SelectedObject = button (ignore warning)")
+print("   2. SendKeyEvent(Return)")
+print("========================================")
 
 print("📋 Configs:", #configs, "| 📄 Macros:", #macros)
 print("========================================")
