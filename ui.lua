@@ -1575,7 +1575,400 @@ toggleSetters["AutoSave"](true, true)
 toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
+-- ==========================================
+-- MACRO SYSTEM
+-- ==========================================
 
+local MacroSystem = {}
+MacroSystem.__index = MacroSystem
+
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+local player = game:GetService("Players").LocalPlayer
+local camera = workspace.CurrentCamera
+
+-- Хранилище макросов
+MacroSystem.Macros = {}
+MacroSystem.CurrentMacro = nil
+MacroSystem.Recording = false
+MacroSystem.Playing = false
+
+-- Текущая запись
+local recordingData = {
+    name = "",
+    actions = {},
+    startTime = 0
+}
+
+-- Функция получения денег игрока
+local function getPlayerMoney()
+    local money = 0
+    pcall(function()
+        -- Путь к деньгам (ИЗМЕНИ ПОД СВОЮ ИГРУ!)
+        money = player.leaderstats.Cash.Value
+        -- ИЛИ
+        -- money = player.PlayerGui.GameGui.Money.Value
+    end)
+    return money
+end
+
+-- Функция получения выбранного юнита
+local function getSelectedUnit()
+    local unit = nil
+    pcall(function()
+        -- Путь к выбранному юниту (ИЗМЕНИ!)
+        unit = player.SelectedUnit.Value
+        -- ИЛИ смотри в GUI какой юнит выбран
+    end)
+    return unit
+end
+
+-- Рандомная позиция рядом (±5 studs)
+local function randomizePosition(originalPos)
+    local randomX = originalPos.X + math.random(-5, 5)
+    local randomZ = originalPos.Z + math.random(-5, 5)
+    return Vector3.new(randomX, originalPos.Y, randomZ)
+end
+
+-- ==========================================
+-- ЗАПИСЬ МАКРОСА
+-- ==========================================
+
+function MacroSystem:StartRecording(macroName)
+    if self.Recording then
+        warn("❌ Уже идёт запись!")
+        return false
+    end
+    
+    self.Recording = true
+    recordingData = {
+        name = macroName or "Macro_" .. os.time(),
+        actions = {},
+        startTime = tick()
+    }
+    
+    if toggleStates["Notifications"] then
+        print("🔴 ЗАПИСЬ МАКРОСА:", recordingData.name)
+    end
+    
+    -- Слушаем действия игрока
+    self:ListenForActions()
+    
+    return true
+end
+
+function MacroSystem:StopRecording()
+    if not self.Recording then
+        warn("❌ Запись не идёт!")
+        return false
+    end
+    
+    self.Recording = false
+    
+    -- Сохраняем макрос
+    self.Macros[recordingData.name] = {
+        name = recordingData.name,
+        actions = recordingData.actions,
+        duration = tick() - recordingData.startTime
+    }
+    
+    if toggleStates["Notifications"] then
+        print("✅ МАКРОС ЗАПИСАН:", recordingData.name)
+        print("   Действий:", #recordingData.actions)
+        print("   Длительность:", math.floor(self.Macros[recordingData.name].duration), "сек")
+    end
+    
+    -- Сохраняем в JSON
+    self:SaveToJSON()
+    
+    return true
+end
+
+-- Слушаем действия игрока
+function MacroSystem:ListenForActions()
+    local connections = {}
+    
+    -- Слушаем клики мыши (размещение юнитов)
+    local mouseConn = game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
+        if not self.Recording then return end
+        if gameProcessed then return end
+        
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            -- Получаем позицию мыши в мире
+            local mousePos = game:GetService("UserInputService"):GetMouseLocation()
+            local ray = camera:ViewportPointToRay(mousePos.X, mousePos.Y)
+            local raycastParams = RaycastParams.new()
+            raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+            raycastParams.FilterDescendantsInstances = {player.Character}
+            
+            local result = workspace:Raycast(ray.Origin, ray.Direction * 1000, raycastParams)
+            
+            if result then
+                local currentTime = tick() - recordingData.startTime
+                local selectedUnit = getSelectedUnit()
+                local currentMoney = getPlayerMoney()
+                
+                -- Записываем действие PLACE
+                table.insert(recordingData.actions, {
+                    type = "PLACE",
+                    unit = selectedUnit,
+                    position = result.Position,
+                    money = currentMoney,
+                    time = currentTime
+                })
+                
+                if toggleStates["Notifications"] then
+                    print(string.format("📍 PLACE: %s at (%.1f, %.1f, %.1f) | $%d | %.1fs", 
+                        tostring(selectedUnit), 
+                        result.Position.X, result.Position.Y, result.Position.Z,
+                        currentMoney,
+                        currentTime
+                    ))
+                end
+            end
+        end
+    end)
+    
+    table.insert(connections, mouseConn)
+    
+    -- TODO: Добавить слушатели для UPGRADE и SELL
+    -- Это зависит от того как в игре делается upgrade/sell
+    
+    -- Очистка при остановке
+    task.spawn(function()
+        repeat task.wait(0.1) until not self.Recording
+        for _, conn in pairs(connections) do
+            conn:Disconnect()
+        end
+    end)
+end
+
+-- ==========================================
+-- ВОСПРОИЗВЕДЕНИЕ МАКРОСА
+-- ==========================================
+
+function MacroSystem:PlayMacro(macroName)
+    if self.Playing then
+        warn("❌ Уже идёт воспроизведение!")
+        return false
+    end
+    
+    local macro = self.Macros[macroName]
+    if not macro then
+        warn("❌ Макрос не найден:", macroName)
+        return false
+    end
+    
+    self.Playing = true
+    self.CurrentMacro = macroName
+    
+    if toggleStates["Notifications"] then
+        print("▶️ ВОСПРОИЗВЕДЕНИЕ:", macroName)
+    end
+    
+    task.spawn(function()
+        local startTime = tick()
+        
+        for i, action in ipairs(macro.actions) do
+            if not self.Playing then break end
+            if not toggleStates or not toggleStates["Play Macro"] then break end
+            
+            -- Ждём нужное время
+            local targetTime = startTime + action.time
+            local waitTime = targetTime - tick()
+            if waitTime > 0 then
+                task.wait(waitTime)
+            end
+            
+            -- Выполняем действие
+            if action.type == "PLACE" then
+                self:ExecutePlaceAction(action)
+            elseif action.type == "UPGRADE" then
+                self:ExecuteUpgradeAction(action)
+            elseif action.type == "SELL" then
+                self:ExecuteSellAction(action)
+            end
+            
+            -- Anti-detect задержка
+            task.wait(math.random(50, 150) / 1000) -- 0.05-0.15 сек
+        end
+        
+        self.Playing = false
+        self.CurrentMacro = nil
+        
+        if toggleStates["Notifications"] then
+            print("✅ МАКРОС ЗАВЕРШЁН:", macroName)
+        end
+    end)
+    
+    return true
+end
+
+function MacroSystem:StopPlaying()
+    self.Playing = false
+    self.CurrentMacro = nil
+    if toggleStates["Notifications"] then
+        print("⏹️ ВОСПРОИЗВЕДЕНИЕ ОСТАНОВЛЕНО")
+    end
+end
+
+-- Выполнение действия PLACE
+function MacroSystem:ExecutePlaceAction(action)
+    -- Проверка денег
+    local currentMoney = getPlayerMoney()
+    if currentMoney < action.money then
+        if toggleStates["Notifications"] then
+            warn(string.format("⏳ Не хватает денег: $%d < $%d (ждём...)", currentMoney, action.money))
+        end
+        
+        -- Ждём пока не будет достаточно денег (максимум 30 сек)
+        local waitStart = tick()
+        repeat
+            task.wait(0.5)
+            currentMoney = getPlayerMoney()
+            if tick() - waitStart > 30 then
+                warn("❌ Таймаут ожидания денег!")
+                return
+            end
+        until currentMoney >= action.money or not self.Playing
+        
+        if not self.Playing then return end
+    end
+    
+    -- Рандомизируем позицию
+    local newPos = randomizePosition(action.position)
+    
+    if toggleStates["Notifications"] then
+        print(string.format("📍 Размещаю: %s at (%.1f, %.1f, %.1f)", 
+            tostring(action.unit), 
+            newPos.X, newPos.Y, newPos.Z
+        ))
+    end
+    
+    -- TODO: КОД РАЗМЕЩЕНИЯ ЮНИТА
+    -- Зависит от механики игры
+    -- Пример:
+    -- selectUnit(action.unit)
+    -- task.wait(0.1)
+    -- clickPosition(newPos)
+end
+
+-- Выполнение UPGRADE
+function MacroSystem:ExecuteUpgradeAction(action)
+    -- TODO: Код апгрейда юнита
+    if toggleStates["Notifications"] then
+        print("⬆️ Upgrade юнита")
+    end
+end
+
+-- Выполнение SELL
+function MacroSystem:ExecuteSellAction(action)
+    -- TODO: Код продажи юнита
+    if toggleStates["Notifications"] then
+        print("💰 Sell юнита")
+    end
+end
+
+-- ==========================================
+-- СОХРАНЕНИЕ/ЗАГРУЗКА JSON
+-- ==========================================
+
+function MacroSystem:SaveToJSON()
+    local json = HttpService:JSONEncode(self.Macros)
+    
+    -- Сохраняем в файл (если экзекутор поддерживает)
+    if writefile then
+        writefile("TowerDefenseMacros.json", json)
+        if toggleStates["Notifications"] then
+            print("💾 Макросы сохранены в файл")
+        end
+    end
+    
+    -- Выводим в консоль для копирования
+    print("========================================")
+    print("📋 JSON МАКРОСОВ (скопируй и сохрани):")
+    print("========================================")
+    print(json)
+    print("========================================")
+end
+
+function MacroSystem:LoadFromJSON(json)
+    local success, data = pcall(function()
+        return HttpService:JSONDecode(json)
+    end)
+    
+    if success then
+        self.Macros = data
+        if toggleStates["Notifications"] then
+            print("✅ Макросы загружены:", #data, "шт.")
+        end
+        return true
+    else
+        warn("❌ Ошибка загрузки JSON:", data)
+        return false
+    end
+end
+
+-- ==========================================
+-- ИНТЕГРАЦИЯ В МЕНЮ
+-- ==========================================
+
+-- Добавляем кнопки в меню
+local function addMacroButtons()
+    local macroFrame = mainFrame.Parent:FindFirstChild("MacroFrame")
+    if not macroFrame then
+        macroFrame = createCategory("Macro System", 4)
+    end
+    
+    -- Кнопка Record
+    createToggle(macroFrame, "Record Macro", function(enabled)
+        if enabled then
+            MacroSystem:StartRecording("MyMacro_" .. os.time())
+        else
+            MacroSystem:StopRecording()
+        end
+    end)
+    
+    -- Кнопка Play
+    createToggle(macroFrame, "Play Macro", function(enabled)
+        if enabled then
+            -- Играем последний записанный макрос
+            local lastMacro = nil
+            for name, _ in pairs(MacroSystem.Macros) do
+                lastMacro = name
+            end
+            
+            if lastMacro then
+                MacroSystem:PlayMacro(lastMacro)
+            else
+                warn("❌ Нет записанных макросов!")
+                toggleStates["Play Macro"] = false
+            end
+        else
+            MacroSystem:StopPlaying()
+        end
+    end)
+end
+
+-- Инициализация
+task.spawn(function()
+    task.wait(2)
+    addMacroButtons()
+    
+    -- Загружаем макросы из файла если есть
+    if readfile and isfile and isfile("TowerDefenseMacros.json") then
+        local json = readfile("TowerDefenseMacros.json")
+        MacroSystem:LoadFromJSON(json)
+    end
+end)
+
+print("========================================")
+print("✅ MACRO SYSTEM LOADED")
+print("   Record Macro - начать запись")
+print("   Play Macro - воспроизвести")
+print("========================================")
+
+return MacroSystem
 
 print("📋 Configs:", #configs, "| 📄 Macros:", #macros)
 print("========================================")
