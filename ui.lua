@@ -1576,11 +1576,11 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - SelectedObject + ENTER
+-- AUTO SKIP - UI NAVIGATION MODE
 -- ==========================================
 
 local GuiService = game:GetService("GuiService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
+local UserGameSettings = UserSettings():GetService("UserGameSettings")
 local RunService = game:GetService("RunService")
 local player = game:GetService("Players").LocalPlayer
 local gui = player:WaitForChild("PlayerGui")
@@ -1599,21 +1599,36 @@ local function activate()
     end
     
     pcall(function()
-        -- Assign the path
+        -- ВКЛЮЧАЕМ UI NAVIGATION MODE
+        GuiService.AutoSelectGuiEnabled = true
+        GuiService.GuiNavigationEnabled = true
+        
+        -- Сохраняем старый режим
+        local oldRotation = UserGameSettings.RotationType
+        
+        -- ПЕРЕКЛЮЧАЕМ В UI MODE (как backslash)
+        UserGameSettings.RotationType = Enum.RotationType.CameraRelative
+        
+        task.wait(0.2)
+        
+        -- ВЫБИРАЕМ КНОПКУ
         GuiService.SelectedObject = btn
         
         task.wait(0.3)
         
-        -- Send ENTER
-        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+        -- ENTER
+        game:GetService("VirtualInputManager"):SendKeyEvent(true, Enum.KeyCode.Return, false, game)
         task.wait(0.05)
-        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+        game:GetService("VirtualInputManager"):SendKeyEvent(false, Enum.KeyCode.Return, false, game)
         
         task.wait(0.2)
+        
+        -- ВЫКЛЮЧАЕМ UI MODE
+        UserGameSettings.RotationType = oldRotation
         GuiService.SelectedObject = nil
         
         if toggleStates and toggleStates["Notifications"] then
-            print("✅ Auto Skip activated")
+            print("✅ Auto Skip (UI Navigation Mode)")
         end
     end)
     
@@ -1640,7 +1655,7 @@ player.CharacterAdded:Connect(function()
     done = false
 end)
 
-print("✅ AUTO SKIP (SelectedObject + Enter)")
+print("✅ AUTO SKIP (UI NAV MODE)")
 
 print("📋 Configs:", #configs, "| 📄 Macros:", #macros)
 print("========================================")
