@@ -1576,7 +1576,7 @@ toggleSetters["Notifications"](true, true)
 toggleSetters["RainbowUI"](true, true)
 
 -- ==========================================
--- AUTO SKIP - ДВИЖЕНИЕ UI SELECTION BOX
+-- AUTO SKIP - SelectedObject + ENTER
 -- ==========================================
 
 local GuiService = game:GetService("GuiService")
@@ -1587,99 +1587,39 @@ local gui = player:WaitForChild("PlayerGui")
 
 task.wait(3)
 
--- Путь к кнопке
-local function findButton()
-    local ok, btn = pcall(function()
-        return gui.GameGui.Screen.Middle.SandboxMenu.SandboxMenu.Frame.Items.Items.Waves.GoToWave.Items.Items.Button
-    end)
-    if ok and btn and btn.Parent then return btn end
-    return nil
-end
-
--- АКТИВАЦИЯ
 local function activate()
-    local btn = findButton()
+    local btn = nil
+    
+    pcall(function()
+        btn = gui.GameGui.Screen.Middle.SandboxMenu.SandboxMenu.Frame.Items.Items.Waves.GoToWave.Items.Items.Button
+    end)
     
     if not btn or not btn.Visible then
-        if toggleStates["Notifications"] then
-            warn("❌ Кнопка не найдена")
-        end
         return false
     end
     
-    if toggleStates["Notifications"] then
-        warn("🔥 Двигаю UI Selection до кнопки...")
-    end
-    
-    local success = false
-    
     pcall(function()
-        -- ВКЛЮЧАЕМ UI НАВИГАЦИЮ
-        GuiService.GuiNavigationEnabled = true
-        GuiService.CoreGuiNavigationEnabled = true
+        -- Assign the path
+        GuiService.SelectedObject = btn
         
-        -- Делаем кнопку выбираемой
-        btn.Selectable = true
-        btn.Active = true
+        task.wait(0.3)
         
-        task.wait(0.15)
-        
-        -- ВЫБИРАЕМ КНОПКУ (рамка переместится к ней)
-        GuiService:Select(btn)
+        -- Send ENTER
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+        task.wait(0.05)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
         
         task.wait(0.2)
-        
-        -- Проверяем что рамка на кнопке
-        if GuiService.SelectedObject == btn then
-            if toggleStates["Notifications"] then
-                print("✅ Selection box на кнопке!")
-            end
-            
-            task.wait(0.2)
-            
-            -- ЖМЁМ ENTER/SPACE (активация выбранного элемента)
-            if toggleStates["Notifications"] then
-                warn("⏎ Нажимаю RETURN (Enter)...")
-            end
-            
-            -- Return DOWN
-            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-            task.wait(0.1)
-            -- Return UP
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-            
-            task.wait(0.1)
-            
-            -- Пробуем SPACE тоже (на всякий случай)
-            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
-            task.wait(0.05)
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
-            
-            success = true
-            
-            if toggleStates["Notifications"] then
-                warn("✅ Клавиши отправлены!")
-            end
-            
-            task.wait(0.3)
-            
-        else
-            if toggleStates["Notifications"] then
-                warn("❌ Selection box не на кнопке!")
-                print("   Сейчас на:", GuiService.SelectedObject)
-            end
-        end
-        
-        -- Очищаем
         GuiService.SelectedObject = nil
-        btn.Selectable = false
         
+        if toggleStates and toggleStates["Notifications"] then
+            print("✅ Auto Skip activated")
+        end
     end)
     
-    return success
+    return true
 end
 
--- ОДИН РАЗ
 local done = false
 
 RunService.Heartbeat:Connect(function()
@@ -1690,35 +1630,17 @@ RunService.Heartbeat:Connect(function()
     
     if not done then
         task.wait(1)
-        
-        if activate() then
-            if toggleStates["Notifications"] then
-                print("========================================")
-                warn("✅✅✅ AUTO SKIP АКТИВИРОВАН!")
-                print("========================================")
-            end
-        else
-            if toggleStates["Notifications"] then
-                warn("❌ НЕ СРАБОТАЛО!")
-            end
-        end
-        
+        activate()
         done = true
     end
 end)
 
--- Респавн
 player.CharacterAdded:Connect(function()
     task.wait(3)
     done = false
 end)
 
-print("========================================")
-print("✅ AUTO SKIP (SELECTION BOX)")
-print("   1. Включаем GuiNavigationEnabled")
-print("   2. GuiService:Select(button)")
-print("   3. SendKeyEvent(Return + Space)")
-print("========================================")
+print("✅ AUTO SKIP (SelectedObject + Enter)")
 
 print("📋 Configs:", #configs, "| 📄 Macros:", #macros)
 print("========================================")
